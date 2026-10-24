@@ -4,6 +4,8 @@ import { SessionProvider } from '@/lib/session-store';
 import Home from '@/pages/Home';
 import Session from '@/pages/Session';
 import Report from '@/pages/Report';
+import Sing from '@/pages/Sing';
+import SongReport from '@/pages/SongReport';
 
 export default function App() {
   return (
@@ -14,6 +16,8 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/session" element={<Session />} />
             <Route path="/report" element={<Report />} />
+            <Route path="/sing" element={<Sing />} />
+            <Route path="/song-report" element={<SongReport />} />
           </Routes>
         </div>
       </SessionProvider>

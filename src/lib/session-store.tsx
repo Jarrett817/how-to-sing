@@ -63,7 +63,7 @@ export interface ReportSummary {
   scores: Record<string, number>;
 }
 
-export function saveReportSummary(report: AnalysisReport): void {
+export function saveReportSummary(report: Pick<AnalysisReport, 'dimensions' | 'meta'>): void {
   try {
     const scores: Record<string, number> = {};
     for (const [k, v] of Object.entries(report.dimensions)) scores[k] = v.score;

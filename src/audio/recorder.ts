@@ -102,6 +102,58 @@ export function recordPcm(
   });
 }
 
+export interface RecordingHandle {
+  /** 手动停止，返回完整 PCM */
+  stop: () => Promise<PcmData>;
+  /** 已开始的毫秒时间戳 */
+  startedAt: number;
+}
+
+/**
+ * 手动停止的录音（唱歌片段用）：调用 start 开始，stop 结束并解码。
+ * 超过 maxMs 自动停止。
+ */
+export function startRecording(
+  stream: MediaStream,
+  onLevel?: (rms: number) => void,
+  maxMs = 120_000,
+): RecordingHandle {
+  const mimeType = pickMimeType();
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks: Blob[] = [];
+  const stopMonitor = onLevel ? startLevelMonitor(stream, onLevel) : () => {};
+  const startedAt = Date.now();
+
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+  recorder.start();
+
+  const done = new Promise<PcmData>((resolve, reject) => {
+    recorder.onerror = () => {
+      stopMonitor();
+      reject(new Error('录音失败'));
+    };
+    recorder.onstop = () => {
+      stopMonitor();
+      const type = recorder.mimeType || mimeType || 'audio/webm';
+      blobToPcm(new Blob(chunks, { type })).then(resolve, reject);
+    };
+  });
+
+  window.setTimeout(() => {
+    if (recorder.state !== 'inactive') recorder.stop();
+  }, maxMs);
+
+  return {
+    startedAt,
+    stop: () => {
+      if (recorder.state !== 'inactive') recorder.stop();
+      return done;
+    },
+  };
+}
+
 /**
  * 环境噪声采样：录音前测 durationMs 的背景 RMS，用于 SNR 估计。
  */

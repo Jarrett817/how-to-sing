@@ -1,7 +1,7 @@
 // 首页：介绍 + 免责声明 + 环境噪声检测 + 开始
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, ShieldCheck, Volume2, Loader2 } from 'lucide-react';
+import { Mic, Music, ShieldCheck, Volume2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -77,10 +77,28 @@ export default function Home() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
+            <Music className="size-4" />
+            唱一段直接分析
+          </CardTitle>
+          <CardDescription>
+            清唱或跟 KTV 伴奏唱都行：自动锁定人声、剔除伴奏干扰，分析音准、颤音、气息和发声状态。
+            不依赖安静环境。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={() => navigate('/sing')}>
+            去唱歌（免环境检测）
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
             <Mic className="size-4" />
             环境检测
           </CardTitle>
-          <CardDescription>先测 2 秒环境噪声，太吵会影响分析准确性</CardDescription>
+          <CardDescription>练声检测需要安静环境：先测 2 秒环境噪声，太吵会影响准确性</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-4">
           {state.phase === 'idle' && <Button onClick={startCheck}>开始环境检测</Button>}

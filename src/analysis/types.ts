@@ -6,8 +6,8 @@ export interface PcmData {
   sampleRate: number;
 }
 
-/** 练声任务类型：长音 / 滑音 / 爬音阶 */
-export type TaskKind = 'sustain' | 'glide' | 'scale';
+/** 录音类型：长音 / 滑音 / 爬音阶 / 唱歌片段 */
+export type TaskKind = 'sustain' | 'glide' | 'scale' | 'song';
 
 export type Level = 'good' | 'fair' | 'poor';
 

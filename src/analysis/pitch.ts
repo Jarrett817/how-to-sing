@@ -17,19 +17,21 @@ export const CLARITY_THRESHOLD = 0.85;
 /**
  * 逐帧基频跟踪。
  * 注意：pitchy 的 findPitch 需要对应 bufferSize 的 Float32Array。
+ * clarityThreshold：唱歌场景（有伴奏）可适当放宽，由调用方决定。
  */
 export function trackPitch(
   samples: Float32Array,
   sampleRate: number,
   frameSize = 2048,
   hopSize = 512,
+  clarityThreshold = CLARITY_THRESHOLD,
 ): PitchFrame[] {
   const detector = PitchDetector.forFloat32Array(frameSize);
   const frames: PitchFrame[] = [];
   for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
     const frame = samples.subarray(start, start + frameSize);
     const [f0, clarity] = detector.findPitch(frame, sampleRate);
-    const voiced = clarity >= CLARITY_THRESHOLD && f0 >= MIN_F0 && f0 <= MAX_F0;
+    const voiced = clarity >= clarityThreshold && f0 >= MIN_F0 && f0 <= MAX_F0;
     frames.push({
       time: (start + frameSize / 2) / sampleRate,
       f0: voiced ? f0 : null,

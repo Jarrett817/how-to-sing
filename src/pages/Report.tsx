@@ -11,14 +11,14 @@ import type { TaskKind } from '@/analysis/types';
 import { saveReportSummary, useSession } from '@/lib/session-store';
 import { TASKS } from '@/lib/tasks';
 
-export const DIMENSIONS: { key: string; label: string }[] = [
-  { key: 'breath', label: '气息稳定' },
-  { key: 'strain', label: '松弛不挤卡' },
-  { key: 'placement', label: '位置靠前' },
-  { key: 'resonance', label: '腔体充分' },
-  { key: 'lowBand', label: '低频' },
-  { key: 'midBand', label: '中频' },
-  { key: 'highBand', label: '高频' },
+export const DIMENSIONS: { key: string; label: string; desc: string }[] = [
+  { key: 'breath', label: '气息稳定', desc: '乐句里音量是否平稳持久，不靠喉咙硬撑' },
+  { key: 'strain', label: '松弛不挤卡', desc: '声带是否放松，有没有扯着嗓子' },
+  { key: 'placement', label: '位置靠前', desc: '声音是否明亮集中，打在面部前方' },
+  { key: 'resonance', label: '腔体充分', desc: '口腔是否打开，声音有没有共鸣空间' },
+  { key: 'lowBand', label: '低频', desc: '声音的厚度与胸腔感' },
+  { key: 'midBand', label: '中频', desc: '声音的主体能量，决定饱满度' },
+  { key: 'highBand', label: '高频', desc: '声音的亮度与穿透力' },
 ];
 
 export default function Report() {
@@ -108,6 +108,7 @@ export default function Report() {
           <DimensionCard
             key={d.key}
             label={d.label}
+            desc={d.desc}
             dim={report.dimensions[d.key as keyof typeof report.dimensions]}
           />
         ))}

@@ -13,20 +13,20 @@ function levelVariant(score: number, level: string): 'default' | 'secondary' | '
   return 'destructive';
 }
 
-/** 原始指标值的展示名与格式化 */
+/** 原始指标值的展示名与格式化（术语配白话，括号保留专业名方便查证） */
 const RAW_LABELS: Record<string, { label: string; unit: string; digits?: number; pct?: boolean }> = {
-  envelopeCV: { label: '包络波动 CV', unit: '%' },
-  phraseCV: { label: '乐句响度 CV', unit: '%' },
-  shimmer: { label: 'Shimmer', unit: '%' },
-  jitter: { label: 'Jitter', unit: '%' },
-  cpp: { label: 'CPP', unit: 'dB' },
-  h1h2: { label: 'H1-H2', unit: 'dB' },
-  singerFormantRatio: { label: '歌手共振峰占比', unit: '%', pct: true },
-  centroid: { label: '频谱质心', unit: 'Hz', digits: 0 },
-  f1: { label: 'F1', unit: 'Hz', digits: 0 },
-  f2: { label: 'F2', unit: 'Hz', digits: 0 },
-  f1Prom: { label: 'F1 突出度', unit: 'dB' },
-  f2Prom: { label: 'F2 突出度', unit: 'dB' },
+  envelopeCV: { label: '响度波动 CV', unit: '%' },
+  phraseCV: { label: '乐句音量波动 CV', unit: '%' },
+  shimmer: { label: '音量抖动 Shimmer', unit: '%' },
+  jitter: { label: '音高抖动 Jitter', unit: '%' },
+  cpp: { label: '嗓音干净度 CPP', unit: 'dB' },
+  h1h2: { label: '声带松紧 H1-H2', unit: 'dB' },
+  singerFormantRatio: { label: '穿透力占比', unit: '%', pct: true },
+  centroid: { label: '音色明亮度（质心）', unit: 'Hz', digits: 0 },
+  f1: { label: '第1共鸣峰 F1', unit: 'Hz', digits: 0 },
+  f2: { label: '第2共鸣峰 F2', unit: 'Hz', digits: 0 },
+  f1Prom: { label: '第1共鸣峰强度', unit: 'dB' },
+  f2Prom: { label: '第2共鸣峰强度', unit: 'dB' },
   ratio: { label: '能量占比', unit: '%', pct: true },
 };
 
@@ -37,7 +37,7 @@ function fmtRaw(key: string, value: number): { label: string; text: string } {
   return { label: meta.label, text: `${v.toFixed(meta.digits ?? 1)} ${meta.unit}`.trim() };
 }
 
-export function DimensionCard({ label, dim }: { label: string; dim: DimensionScore }) {
+export function DimensionCard({ label, desc, dim }: { label: string; desc?: string; dim: DimensionScore }) {
   return (
     <Card>
       <CardHeader>
@@ -47,6 +47,7 @@ export function DimensionCard({ label, dim }: { label: string; dim: DimensionSco
             {dim.score < 0 ? '数据不足' : `${dim.score} 分 · ${LEVEL_TEXT[dim.level]}`}
           </Badge>
         </div>
+        {desc && <p className="text-muted-foreground text-xs">{desc}</p>}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {dim.score >= 0 && <Progress value={dim.score} />}

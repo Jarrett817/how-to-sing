@@ -101,6 +101,30 @@ export default function SongReport() {
       )}
 
       <Card>
+        <CardContent className="pt-6">
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">
+              这个报告是怎么分析出来的？
+            </summary>
+            <ol className="text-muted-foreground mt-3 list-decimal space-y-2 pl-5">
+              <li>
+                <span className="text-foreground font-medium">找到你的声音</span>
+                ：把录音切成许多小片段，寻找带有人声特征（一串规律排列的谐波）的音高，把它和伴奏、环境杂音区分开。
+              </li>
+              <li>
+                <span className="text-foreground font-medium">只听你的声音</span>
+                ：伴奏太响、盖过人声的片段会被判为不可信——音准、颤音照常计算；音色类指标只在你声音占主导的片段上取值，尽量不被伴奏污染。
+              </li>
+              <li>
+                <span className="text-foreground font-medium">计算指标</span>
+                ：音准 = 你唱的音离最近的标准音差多少；颤音 = 长音是否有规律地轻摇；气息 = 乐句内音量是否平稳；音色类维度 = 声音能量在不同频率上的分布。
+              </li>
+            </ol>
+          </details>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">七维总览</CardTitle>
           <CardDescription>与练声报告同一套维度；伴奏干扰大的维度会标"数据不足"</CardDescription>
@@ -115,7 +139,8 @@ export default function SongReport() {
           <CardHeader>
             <CardTitle className="text-base">音符与音准</CardTitle>
             <CardDescription>
-              绿色=准（≤15音分） 黄色=略偏（≤35） 红色=明显偏（&gt;35）
+              每个色块是你唱的一个音符，高度=音高。绿色=准（偏差≤15音分） 黄色=略偏（≤35）
+              红色=明显偏（&gt;35）；100 音分 = 半个音（do 到 do# 的距离）
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -143,6 +168,9 @@ export default function SongReport() {
                     ? '略有偏差，注意听伴奏定音'
                     : '偏差较大，先慢速跟唱找音高'}
             </p>
+            <p className="text-muted-foreground text-xs">
+              你唱的音与标准音的平均偏差，越小越准；100 音分 = 半个音
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -158,6 +186,9 @@ export default function SongReport() {
               {Number.isFinite(song.vibrato.rate)
                 ? `幅度约 ±${(song.vibrato.extent / 2).toFixed(0)} 音分${song.vibrato.rate >= 4 && song.vibrato.rate <= 8 ? '，速率在自然范围' : song.vibrato.rate < 4 ? '，偏慢' : '，偏快（可能发紧）'}`
                 : '未检测到明显颤音（长直音也可能是刻意的）'}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              颤音 = 声音有规律地轻摇；Hz 表示每秒摇几次
             </p>
           </CardContent>
         </Card>
@@ -175,6 +206,9 @@ export default function SongReport() {
               {song.notes.length > 0
                 ? `共 ${song.notes.length} 个音符 · ${song.phrases.length} 个乐句`
                 : '未识别到稳定音符'}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              这段演唱中你唱到的最低音 – 最高音
             </p>
           </CardContent>
         </Card>
@@ -197,14 +231,15 @@ export default function SongReport() {
           <DimensionCard
             key={d.key}
             label={d.label}
+            desc={d.desc}
             dim={report.dimensions[d.key as keyof typeof report.dimensions]}
           />
         ))}
       </div>
 
       <div className="flex justify-center gap-2">
-        <Badge variant="outline">人声主导帧 {song.dominantFrames}</Badge>
-        <Badge variant="outline">浊音占比 {Math.round(song.voicedRatio * 100)}%</Badge>
+        <Badge variant="outline">人声可信片段 {song.dominantFrames} 帧</Badge>
+        <Badge variant="outline">人声时长占比 {Math.round(song.voicedRatio * 100)}%</Badge>
       </div>
 
       <p className="text-muted-foreground text-center text-xs">

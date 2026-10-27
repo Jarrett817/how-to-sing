@@ -11,14 +11,74 @@ function audioContext(): AudioContext {
 
 /** 申请麦克风。关闭降噪/自动增益，避免算法污染声学特征。 */
 export async function requestMic(): Promise<MediaStream> {
-  return navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
-      channelCount: 1,
-    },
-  });
+  // 先做能力检查，避免在不支持的浏览器里报一个看不懂的 TypeError
+  const issue = micSupportIssue();
+  if (issue) throw new Error(issue);
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 1,
+      },
+    });
+  } catch (err) {
+    // 部分安卓/鸿蒙浏览器不接受这些音频约束，退回最简约束再试一次
+    if (isPermissionOrDeviceError(err)) throw new Error(micErrorMessage(err));
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err2) {
+      throw new Error(micErrorMessage(err2));
+    }
+  }
+}
+
+/** 麦克风能力检查：返回给用户看的提示，可用时返回 null */
+export function micSupportIssue(): string | null {
+  if (typeof window !== 'undefined' && !window.isSecureContext) {
+    return '当前页面不是 HTTPS 安全连接，浏览器不会开放麦克风。请用 https:// 地址打开本页。';
+  }
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    return '这个浏览器不支持网页录音（缺少麦克风接口）。请换用 Chrome、Edge、Safari，或在浏览器菜单里选择"桌面版网站"后重试。';
+  }
+  if (typeof MediaRecorder === 'undefined') {
+    return '这个浏览器不支持录音编码（缺少 MediaRecorder）。请换用 Chrome、Edge、Safari 再试。';
+  }
+  return null;
+}
+
+function isPermissionOrDeviceError(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name ?? '';
+  return [
+    'NotAllowedError',
+    'PermissionDeniedError',
+    'SecurityError',
+    'NotFoundError',
+    'DevicesNotFoundError',
+    'NotReadableError',
+    'TrackStartError',
+  ].includes(name);
+}
+
+/** 把浏览器抛出的权限/设备错误翻译成用户能看懂的提示 */
+function micErrorMessage(err: unknown): string {
+  const name = (err as { name?: string } | null)?.name ?? '';
+  switch (name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+    case 'SecurityError':
+      return '麦克风权限被拒绝。请点击地址栏的权限图标允许本站使用麦克风，然后重试。';
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      return '没有检测到麦克风设备。请检查麦克风是否已连接、是否被系统禁用。';
+    case 'NotReadableError':
+    case 'TrackStartError':
+      return '麦克风被其他应用占用。请关闭其他录音/会议/语音软件后重试。';
+    default:
+      return `无法打开麦克风（${name || '未知错误'}）。请检查浏览器麦克风权限后重试。`;
+  }
 }
 
 export function releaseMic(stream: MediaStream): void {
@@ -52,6 +112,18 @@ function startLevelMonitor(stream: MediaStream, onLevel: (rms: number) => void):
     source.disconnect();
     analyser.disconnect();
   };
+}
+
+/** 实时电平监视（录音前试音用）：返回停止函数 */
+export function monitorLevel(stream: MediaStream, onLevel: (rms: number) => void): () => void {
+  return startLevelMonitor(stream, onLevel);
+}
+
+/** 线性 RMS → 0-100 显示进度（-60dBFS 以下为 0，接近满幅为 100） */
+export function rmsToPercent(rms: number): number {
+  if (!(rms > 0)) return 0;
+  const db = 20 * Math.log10(rms);
+  return Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
 }
 
 async function blobToPcm(blob: Blob): Promise<PcmData> {

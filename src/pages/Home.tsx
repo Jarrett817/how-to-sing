@@ -26,8 +26,11 @@ export default function Home() {
     let stream: MediaStream;
     try {
       stream = await requestMic();
-    } catch {
-      setState({ phase: 'error', message: '无法访问麦克风，请在浏览器中授权后重试' });
+    } catch (e) {
+      setState({
+        phase: 'error',
+        message: e instanceof Error ? e.message : '无法访问麦克风，请在浏览器中授权后重试',
+      });
       return;
     }
     setState({ phase: 'measuring', progress: 0 });

@@ -5,7 +5,7 @@ import { Check, Loader2, Mic, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { recordPcm, releaseMic, requestMic } from '@/audio/recorder';
+import { recordPcm, monitorLevel, releaseMic, requestMic, rmsToPercent } from '@/audio/recorder';
 import { TASKS } from '@/lib/tasks';
 import { useSession } from '@/lib/session-store';
 
@@ -16,23 +16,19 @@ export default function Session() {
   const { recordings, setRecording, clearRecording } = useSession();
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [micError, setMicError] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
   const [step, setStep] = useState(0);
   const [phase, setPhase] = useState<StepPhase>('idle');
   const [progress, setProgress] = useState(0);
   const [level, setLevel] = useState(0);
   const cancelledRef = useRef(false);
+  const previewStopRef = useRef<(() => void) | null>(null);
 
-  // 进入页面即申请麦克风，离开释放
+  // 离开页面时释放麦克风和试音监听
   useEffect(() => {
-    cancelledRef.current = false;
-    requestMic()
-      .then((s) => {
-        if (cancelledRef.current) releaseMic(s);
-        else setStream(s);
-      })
-      .catch(() => setMicError('无法访问麦克风，请返回首页重新授权'));
     return () => {
       cancelledRef.current = true;
+      previewStopRef.current?.();
       setStream((s) => {
         if (s) releaseMic(s);
         return null;
@@ -40,12 +36,46 @@ export default function Session() {
     };
   }, []);
 
+  // 麦克风必须由用户点击触发申请：部分手机浏览器（含华为）不会响应页面加载时的自动申请
+  const enableMic = async () => {
+    setRequesting(true);
+    try {
+      const s = await requestMic();
+      if (cancelledRef.current) {
+        releaseMic(s);
+        return;
+      }
+      setMicError(null);
+      setStream(s);
+      previewStopRef.current = monitorLevel(s, setLevel);
+    } catch (e) {
+      setMicError(e instanceof Error ? e.message : '无法访问麦克风，请重试');
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  // 已有麦克风流时（例如录音失败），重试只需恢复试音，不重复申请设备
+  const retryMic = () => {
+    if (stream) {
+      setMicError(null);
+      setPhase('idle');
+      previewStopRef.current?.();
+      previewStopRef.current = monitorLevel(stream, setLevel);
+    } else {
+      void enableMic();
+    }
+  };
+
   const task = TASKS[step];
   const isLast = step === TASKS.length - 1;
   const recorded = recordings[task.kind] != null;
 
   const startRecording = async () => {
     if (!stream) return;
+    // 试音监听让位给录音电平监听
+    previewStopRef.current?.();
+    previewStopRef.current = null;
     setPhase('recording');
     setProgress(0);
     const startedAt = Date.now();
@@ -62,6 +92,7 @@ export default function Session() {
     } finally {
       window.clearInterval(timer);
       setLevel(0);
+      if (!cancelledRef.current) previewStopRef.current = monitorLevel(stream, setLevel);
     }
   };
 
@@ -87,9 +118,19 @@ export default function Session() {
         <Card>
           <CardContent className="flex flex-col items-start gap-4 pt-6">
             <p className="text-destructive text-sm">{micError}</p>
-            <Link to="/">
-              <Button>返回首页</Button>
-            </Link>
+            <ul className="text-muted-foreground flex flex-col gap-1 text-xs">
+              <li>· 出现权限提示时请选择"允许"；之前拒绝过的话，点地址栏的权限图标重新允许</li>
+              <li>· 华为/鸿蒙浏览器：在浏览器设置里允许本站使用麦克风，或复制链接到 Chrome / Edge 打开</li>
+              <li>· 关闭其他正在录音、语音通话或开会的软件</li>
+            </ul>
+            <div className="flex gap-2">
+              <Button onClick={retryMic} disabled={requesting}>
+                {requesting ? '正在请求…' : '重试'}
+              </Button>
+              <Link to="/">
+                <Button variant="outline">返回首页</Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -129,6 +170,24 @@ export default function Session() {
             时长 {task.durationMs / 1000} 秒 · 用于判断：{task.purpose}
           </p>
 
+          {stream && phase === 'idle' && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Mic className="text-primary size-4" />
+                <span className="text-muted-foreground text-sm">输入音量</span>
+                <div className="bg-muted h-3 flex-1 overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full transition-[width] duration-75"
+                    style={{ width: `${rmsToPercent(level)}%` }}
+                  />
+                </div>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                试着说句话，音量条应随之跳动；如果一直不动，请检查系统麦克风权限和输入设备。
+              </p>
+            </div>
+          )}
+
           {phase === 'recording' && (
             <div className="flex flex-col gap-3">
               <Progress value={progress} />
@@ -137,7 +196,7 @@ export default function Session() {
                 <div className="bg-muted h-3 flex-1 overflow-hidden rounded-full">
                   <div
                     className="bg-primary h-full transition-[width] duration-75"
-                    style={{ width: `${Math.min(100, level * 400)}%` }}
+                    style={{ width: `${rmsToPercent(level)}%` }}
                   />
                 </div>
               </div>
@@ -146,10 +205,28 @@ export default function Session() {
           )}
 
           <div className="flex gap-2">
-            {phase === 'idle' && !recorded && (
-              <Button onClick={startRecording} disabled={!stream}>
-                {stream ? '开始录音' : '等待麦克风…'}
-              </Button>
+            {phase === 'idle' && !recorded && !stream && (
+              <>
+                <Button onClick={() => void enableMic()} disabled={requesting}>
+                  {requesting ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      正在请求麦克风…
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="size-4" />
+                      开启麦克风
+                    </>
+                  )}
+                </Button>
+                <Link to="/">
+                  <Button variant="outline">返回首页</Button>
+                </Link>
+              </>
+            )}
+            {phase === 'idle' && !recorded && stream && (
+              <Button onClick={() => void startRecording()}>开始录音</Button>
             )}
             {phase === 'idle' && recorded && (
               <>

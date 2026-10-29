@@ -1,8 +1,9 @@
 // 首页：介绍 + 性别选择 + 唱歌分析入口
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Music, ShieldCheck, TrendingUp, Volume2 } from 'lucide-react';
+import { Activity, ArrowRight, AudioLines, Music, ShieldCheck, TrendingUp, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { HistoryChart } from '@/components/charts/HistoryChart';
 import { clearHistory, loadGender, loadHistory, saveGender } from '@/lib/session-store';
@@ -19,91 +20,134 @@ export default function Home() {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <header className="text-center">
-        <h1 className="text-3xl font-bold tracking-tight">发声科学检测</h1>
-        <p className="text-muted-foreground mt-2">
-          不是跟原唱比打分，而是检查你的发声技术：气息、挤卡、位置、腔体、频段分布
-        </p>
+    <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-6 sm:px-6 lg:py-8">
+      <nav className="flex items-center justify-between" aria-label="品牌导航">
+        <div className="flex items-center gap-3">
+          <span className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-2xl shadow-md shadow-indigo-950/15">
+            <AudioLines className="size-5" />
+          </span>
+          <div>
+            <p className="font-semibold tracking-wide">声研所</p>
+            <p className="text-muted-foreground text-[10px] tracking-[0.24em]">VOICE LAB</p>
+          </div>
+        </div>
+        <Badge variant="outline" className="bg-white/60 px-3 py-1">
+          <ShieldCheck className="size-3.5 text-emerald-600" />本地分析 · 隐私优先
+        </Badge>
+      </nav>
+
+      <header className="grid items-center gap-8 py-6 lg:grid-cols-[1.15fr_.85fr] lg:py-10">
+        <div>
+          <Badge variant="secondary" className="mb-5 px-3 py-1">你的私人声乐复盘室</Badge>
+          <h1 className="max-w-xl text-4xl font-semibold leading-[1.12] tracking-[-0.04em] text-slate-950 sm:text-5xl">
+            听见声音，<br />也看见<span className="text-primary">进步。</span>
+          </h1>
+          <p className="text-muted-foreground mt-5 max-w-lg text-base leading-7">
+            不只给一个分数。把音准、气息与共鸣放回演唱的时间轴里，知道哪一句唱得好，下一句该怎么调整。
+          </p>
+          <div className="text-muted-foreground mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            <span className="flex items-center gap-1.5"><Activity className="text-primary size-4" />七维声学分析</span>
+            <span className="flex items-center gap-1.5"><Music className="text-primary size-4" />逐句音频复盘</span>
+          </div>
+        </div>
+        <div className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-2xl shadow-indigo-950/20 sm:p-8">
+          <div className="absolute -right-16 -top-16 size-48 rounded-full bg-violet-600/25 blur-3xl" />
+          <div className="relative">
+            <div className="flex items-center justify-between text-[10px] tracking-[0.2em] text-slate-400">
+              <span>LIVE VOICE MAP</span>
+              <span className="flex items-center gap-1.5"><i className="size-1.5 rounded-full bg-emerald-400" />READY</span>
+            </div>
+            <div className="my-9 flex h-28 items-center gap-1.5" aria-hidden="true">
+              {Array.from({ length: 28 }, (_, i) => (
+                <span
+                  key={i}
+                  className="flex-1 rounded-full bg-gradient-to-t from-indigo-500 to-violet-300 opacity-90"
+                  style={{ height: `${22 + ((i * 29) % 72)}%` }}
+                />
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-3 border-t border-white/10 pt-5">
+              {[['PITCH', '音准'], ['BREATH', '气息'], ['TONE', '共鸣']].map(([en, zh]) => (
+                <div key={en}>
+                  <p className="text-[10px] tracking-widest text-violet-300">{en}</p>
+                  <p className="mt-1 text-sm text-slate-200">{zh}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ShieldCheck className="size-4" />
-            隐私说明
-          </CardTitle>
-          <CardDescription>
-            所有录音只在你的浏览器内存中处理，不上传、不存储，刷新后即消失。
-            性别和各维度分数只保存在本机，历史分数随时可以清除。
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Volume2 className="size-4" />
-            开始前请确认
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-muted-foreground flex flex-col gap-2 text-sm">
-          <p>1. 在安静的房间里，避免风扇、车流等持续噪声</p>
-          <p>2. 距离麦克风 15–30 cm，不要用嘴贴着它</p>
-          <p>3. 本检测是声学特征分析，不能替代声乐老师；阈值基于通用经验值，结果供参考</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Music className="size-4" />
-            唱一段直接分析
-          </CardTitle>
-          <CardDescription>
-            清唱或跟 KTV 伴奏唱都行：自动锁定人声、剔除伴奏干扰，分析音准、颤音、气息和发声状态。
-            不依赖安静环境。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start gap-4">
-          <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium">开始前请选择性别</p>
-            <div className="flex gap-2" role="group" aria-label="性别">
-              <Button
-                type="button"
-                variant={gender === 'male' ? 'default' : 'outline'}
-                aria-pressed={gender === 'male'}
-                onClick={() => chooseGender('male')}
-              >
-                男
-              </Button>
-              <Button
-                type="button"
-                variant={gender === 'female' ? 'default' : 'outline'}
-                aria-pressed={gender === 'female'}
-                onClick={() => chooseGender('female')}
-              >
-                女
-              </Button>
+      <main className="grid items-start gap-5 lg:grid-cols-[1.2fr_.8fr]">
+        <Card className="border-primary/15 bg-white/90">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <span className="bg-primary/10 text-primary flex size-9 items-center justify-center rounded-xl"><Music className="size-4" /></span>
+              唱一段，开始今天的复盘
+            </CardTitle>
+            <CardDescription className="leading-6">
+              清唱或跟 KTV 伴奏唱都可以。自动锁定人声，分析音准、颤音、气息和发声状态。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <div className="rounded-2xl bg-muted/60 p-4">
+              <p className="text-sm font-medium">请选择你的性别</p>
+              <p className="text-muted-foreground mt-1 text-xs">用于匹配对应声部参考，选择会保存在本机</p>
+              <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="性别">
+                <Button
+                  type="button"
+                  variant={gender === 'male' ? 'default' : 'outline'}
+                  aria-pressed={gender === 'male'}
+                  className="h-11"
+                  onClick={() => chooseGender('male')}
+                >
+                  男声
+                </Button>
+                <Button
+                  type="button"
+                  variant={gender === 'female' ? 'default' : 'outline'}
+                  aria-pressed={gender === 'female'}
+                  className="h-11"
+                  onClick={() => chooseGender('female')}
+                >
+                  女声
+                </Button>
+              </div>
             </div>
-            <p className="text-muted-foreground text-xs">用于匹配对应声部参考，选择会保存在本机</p>
-          </div>
-          <Button disabled={!gender} onClick={() => navigate('/sing')}>
-            开始唱歌
-          </Button>
-        </CardContent>
-      </Card>
+            <Button size="lg" className="h-12 w-full text-base" disabled={!gender} onClick={() => navigate('/sing')}>
+              进入录音室<ArrowRight className="size-4" />
+            </Button>
+            {!gender && <p className="-mt-3 text-center text-xs text-muted-foreground">选择性别后即可开始</p>}
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-col gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Volume2 className="text-primary size-4" />录出更可靠的声音</CardTitle>
+            </CardHeader>
+            <CardContent className="text-muted-foreground flex flex-col gap-3 text-sm">
+              <p><span className="text-primary mr-2 font-medium">01</span>在安静房间里，避开风扇与车流噪声</p>
+              <p><span className="text-primary mr-2 font-medium">02</span>距离麦克风 15–30 cm，不要贴着它</p>
+              <p><span className="text-primary mr-2 font-medium">03</span>自然演唱一两句完整歌词，无需刻意大声</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-emerald-50/55 shadow-none">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="size-4 text-emerald-600" />声音只属于你</CardTitle>
+              <CardDescription className="leading-6">
+                录音只在浏览器内存中处理，不上传、不存储，刷新后即消失。性别和历史分数仅保存在本机，可随时清除。
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      </main>
 
       {history.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="size-4" />
-              你的历史趋势
-            </CardTitle>
-            <CardDescription>
-              绝对分会受录音设备和状态影响，长期趋势更适合观察自己的变化。
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="text-primary size-4" />你的历史趋势</CardTitle>
+            <CardDescription>绝对分会受录音设备和状态影响，长期趋势更适合观察自己的变化。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <HistoryChart history={history} />
@@ -121,6 +165,10 @@ export default function Home() {
           </CardContent>
         </Card>
       )}
+
+      <footer className="text-muted-foreground pb-4 text-center text-xs">
+        声学特征分析不能替代声乐老师；阈值基于通用经验值，结果供练习参考
+      </footer>
     </div>
   );
 }

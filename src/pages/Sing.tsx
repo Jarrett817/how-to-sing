@@ -28,6 +28,7 @@ export default function Sing() {
 
   // 离开页面时释放麦克风和试音监听
   useEffect(() => {
+    cancelledRef.current = false;
     return () => {
       cancelledRef.current = true;
       previewStopRef.current?.();
@@ -140,19 +141,26 @@ export default function Sing() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Music className="size-5" />
-            唱一段，直接分析
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-10">
+      <header>
+        <p className="text-primary text-[10px] font-medium tracking-[0.24em]">RECORDING STUDIO</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">唱一段，听见细节</h1>
+        <p className="text-muted-foreground mt-2 text-sm">放松、自然地唱。接下来的复盘会精确到每一个乐句。</p>
+      </header>
+      <Card className="overflow-hidden border-primary/15 py-0 shadow-lg shadow-indigo-950/5">
+        <CardHeader className="bg-gradient-to-br from-slate-950 to-indigo-950 px-6 py-7 text-white">
+          <CardTitle className="flex items-center gap-3 text-xl">
+            <span className={`flex size-11 items-center justify-center rounded-2xl bg-white/10 ${phase === 'recording' ? 'animate-pulse text-rose-300' : 'text-violet-300'}`}>
+              <Music className="size-5" />
+            </span>
+            {phase === 'recording' ? '正在聆听你的演唱' : '准备好后，开始演唱'}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="leading-6 text-slate-400">
             清唱或跟着 KTV 伴奏唱都可以。分析只针对你的人声：会自动锁定你的音高，
             剔除伴奏占主导的片段；伴奏太盖过人声时会提示而不是硬算。
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-5 px-6 pb-7">
           <ul className="text-muted-foreground flex flex-col gap-1 text-sm">
             <li>· 唱 {MIN_MS / 1000}–{MAX_MS / 1000} 秒，包含一两句完整的歌词效果最好</li>
             <li>· 有伴奏时：麦克风离嘴近一点（15–30cm），离音箱远一点</li>
@@ -218,7 +226,7 @@ export default function Sing() {
             )}
             {phase === 'idle' && stream && (
               <>
-                <Button onClick={start}>开始录音</Button>
+                <Button size="lg" className="h-12 px-6" onClick={start}><Mic className="size-4" />开始录音</Button>
                 <Link to="/">
                   <Button variant="outline">返回</Button>
                 </Link>

@@ -1,27 +1,25 @@
 // 唱歌分析报告：七维评分（抗伴奏降级）+ 音准/颤音/音域/音符回放（分析在 Worker 中进行）
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { AudioWaveform, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadarChart } from '@/components/charts/RadarChart';
 import { EnvelopeChart } from '@/components/charts/EnvelopeChart';
-import { NoteChart } from '@/components/charts/NoteChart';
+import { PerformancePlayer } from '@/components/PerformancePlayer';
 import { DIMENSIONS, DimensionCard } from '@/components/DimensionCard';
 import { MetricHelp } from '@/components/MetricHelp';
 import { QualityNotice } from '@/components/QualityNotice';
 import { runSongAnalysis } from '@/analysis/client';
 import type { SongReport } from '@/analysis/song';
 import { classifyVoiceRange } from '@/analysis/voice-range';
-import { playSegment, stopPlayback } from '@/audio/playback';
 import { historyBaselines, loadGender, loadHistory, saveReportSummary, useSession } from '@/lib/session-store';
 
 export default function SongReport() {
   const { recording: pcm, reset } = useSession();
   const [gender] = useState(loadGender);
   const [report, setReport] = useState<SongReport | null>(null);
-  const [playingIdx, setPlayingIdx] = useState(-1);
   const savedRef = useRef(false);
   // 在本次报告写入历史之前取一次，作为个人基线
   const [history] = useState(() => loadHistory());
@@ -41,9 +39,6 @@ export default function SongReport() {
       cancelled = true;
     };
   }, [pcm]);
-
-  // 离开报告页时停止回放
-  useEffect(() => () => stopPlayback(), []);
 
   useEffect(() => {
     if (report && !savedRef.current) {
@@ -84,34 +79,32 @@ export default function SongReport() {
   }));
   const degraded = song.dominantRatio < 0.3 && song.voicedRatio > 0.2;
 
-  const handleNoteClick = (_note: (typeof song.notes)[number], index: number) => {
-    if (playingIdx === index) {
-      stopPlayback();
-      setPlayingIdx(-1);
-      return;
-    }
-    const note = song.notes[index];
-    // 前后各留一点余量，避免起音/收音被切得太生硬
-    playSegment(pcm, Math.max(0, note.startSec - 0.08), note.endSec + 0.2, () => setPlayingIdx(-1));
-    setPlayingIdx(index);
-  };
-
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">唱歌分析报告</h1>
-          <p className="text-muted-foreground text-sm">
-            {new Date(report.meta.createdAt).toLocaleString('zh-CN')} · 时长{' '}
-            {song.duration.toFixed(1)}s · 人声主导 {Math.round(song.dominantRatio * 100)}%
-          </p>
+    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
+      <header className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-xl shadow-indigo-950/15 sm:p-8">
+        <div className="absolute -right-20 -top-24 size-64 rounded-full bg-violet-600/25 blur-3xl" />
+        <div className="relative flex flex-wrap items-end justify-between gap-5">
+          <div>
+            <p className="flex items-center gap-2 text-[10px] tracking-[0.24em] text-violet-300">
+              <AudioWaveform className="size-4" />VOCAL SESSION REPORT
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">你的演唱，逐句看清。</h1>
+            <p className="mt-3 text-sm text-slate-400">
+              {new Date(report.meta.createdAt).toLocaleString('zh-CN')} · 时长{' '}
+              {song.duration.toFixed(1)}s · 人声主导 {Math.round(song.dominantRatio * 100)}%
+            </p>
+          </div>
+          <Link to="/sing" onClick={() => reset()}>
+            <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20">
+              <RotateCcw className="size-4" />再唱一段
+            </Button>
+          </Link>
         </div>
-        <Link to="/sing" onClick={() => reset()}>
-          <Button variant="outline">再唱一段</Button>
-        </Link>
       </header>
 
       <QualityNotice pcm={pcm} />
+
+      <PerformancePlayer pcm={pcm} song={song} />
 
       {song.voicedRatio < 0.2 && (
         <Card>
@@ -167,28 +160,6 @@ export default function SongReport() {
           <RadarChart items={radarItems} />
         </CardContent>
       </Card>
-
-      {song.notes.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-1">
-              <CardTitle className="text-base">音符与音准</CardTitle>
-              <MetricHelp title="音符图怎么看、怎么回放">
-                <p>每个色块是一个识别出的音符：横轴时间、纵轴音高，颜色表示它与最近标准音的偏差（绿 ≤15 音分，黄 ≤35，红 &gt;35；100 音分 = 半个音）。</p>
-                <p>点任意色块可以回放这一小段录音，再点一次停止。对照"听到的"和"看到的"偏差，是最直接的音准练习方式。</p>
-                <p>注意：色块颜色包含整体起音偏移。如果整段都偏黄偏红但"扣除偏移后的音准偏差"很小，说明你只是起音起高/起低了，音准控制本身没问题。</p>
-                <p>滑音、转音和过短的装饰音不参与统计，伴奏盖过人声的片段也会被剔除。</p>
-              </MetricHelp>
-            </div>
-            <CardDescription>
-              高度=音高，颜色=偏差；点击色块回放该音符（再点一次停止）
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <NoteChart notes={song.notes} onNoteClick={handleNoteClick} activeIndex={playingIdx} />
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>

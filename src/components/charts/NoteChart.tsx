@@ -10,6 +10,10 @@ interface NoteChartProps {
   onNoteClick?: (note: NoteSegment, index: number) => void;
   /** 正在回放的音符下标，高亮描边 */
   activeIndex?: number;
+  /** 当前播放位置（秒），绘制同步播放头 */
+  currentTime?: number;
+  /** 完整录音时长，避免只按最后一个音符截断时间轴 */
+  duration?: number;
 }
 
 /** |centsDev| → 颜色：≤15 准，≤35 略偏，>35 明显偏 */
@@ -26,6 +30,8 @@ export function NoteChart({
   height = 180,
   onNoteClick,
   activeIndex = -1,
+  currentTime,
+  duration,
 }: NoteChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -41,7 +47,7 @@ export function NoteChart({
     const midis = notes.map((n) => n.midi);
     const minMidi = Math.min(...midis) - 1;
     const maxMidi = Math.max(...midis) + 1;
-    const maxT = Math.max(...notes.map((n) => n.endSec));
+    const maxT = Math.max(duration ?? 0, ...notes.map((n) => n.endSec), 0.001);
     return {
       padL,
       padT,
@@ -54,7 +60,7 @@ export function NoteChart({
       xOf: (t: number) => padL + (t / maxT) * plotW,
       rowH: plotH / (maxMidi - minMidi + 1),
     };
-  }, [notes, width, height]);
+  }, [notes, width, height, duration]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -106,6 +112,21 @@ export function NoteChart({
       ctx.globalAlpha = 1;
     });
 
+    // 播放头与音频时间同步，位置超出最后一个音符时也继续走到录音末尾
+    if (currentTime != null && currentTime >= 0 && currentTime <= maxT) {
+      const x = xOf(currentTime);
+      ctx.strokeStyle = '#4f46e5';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + plotH);
+      ctx.stroke();
+      ctx.fillStyle = '#4f46e5';
+      ctx.beginPath();
+      ctx.arc(x, padT + 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // 时间刻度（每 5 秒）
     ctx.fillStyle = fg;
     ctx.textAlign = 'center';
@@ -113,7 +134,7 @@ export function NoteChart({
     for (let t = 0; t <= maxT; t += 5) {
       ctx.fillText(`${t}s`, xOf(t), padT + plotH + 4);
     }
-  }, [notes, geom, activeIndex, width, height]);
+  }, [notes, geom, activeIndex, currentTime, width, height]);
 
   if (!geom) return null;
 

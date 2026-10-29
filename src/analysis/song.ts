@@ -18,9 +18,10 @@ import {
 import { cpp as calcCpp } from './cepstrum';
 import { autocorrelate, levinson, lpcSpectrum, pickFormants } from './lpc';
 import { rmsEnvelope } from './envelope';
-import { ANALYSIS_RATE } from './analyze';
 import { THRESHOLDS, bandScore, h1h2Range, levelOf, linmap, weightedMean } from './thresholds';
 
+/** 分析内部统一采样率：人声有效信息 < 8kHz，22.05k 足够且 FFT 更快 */
+export const ANALYSIS_RATE = 22050;
 const FRAME_SIZE = 2048;
 const HOP_SIZE = 512;
 const FFT_SIZE = 4096;
@@ -640,7 +641,7 @@ function songBreath(s: SongResult): DimensionScore {
 function songStrain(s: SongResult): DimensionScore {
   if (s.dominantFrames < MIN_DOMINANT_FRAMES) return insufficient(ACCOMPANIMENT_HINT);
   const T = THRESHOLDS.strain;
-  // 与练声一致：H1-H2 按中位基频分档，避免高音被误判为挤卡
+  // H1-H2 按中位基频分档，避免高音被误判为挤卡
   const hRange = h1h2Range(s.medianF0);
   const score = weightedMean([
     [linmap(s.cpp, T.cppBad, 0, T.cppGood, 100), T.wCpp],

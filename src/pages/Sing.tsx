@@ -102,7 +102,7 @@ export default function Sing() {
         setPhase('idle');
         return;
       }
-      setRecording('song', pcm);
+      setRecording(pcm);
       navigate('/song-report');
     } catch {
       setMicError('录音失败，请重试');

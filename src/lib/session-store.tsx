@@ -1,4 +1,4 @@
-// 会话状态：一次练声流程中的录音与环境噪声，内存保存（录音不出设备）
+// 当前唱歌录音只保存在内存中，刷新后即消失
 import {
   createContext,
   useCallback,
@@ -7,43 +7,20 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { AnalysisReport, PcmData, TaskKind } from '@/analysis/types';
+import type { AnalysisReport, Gender, PcmData } from '@/analysis/types';
 
 interface SessionState {
-  recordings: Partial<Record<TaskKind, PcmData>>;
-  ambientRms: number | null;
-  setRecording: (kind: TaskKind, pcm: PcmData) => void;
-  clearRecording: (kind: TaskKind) => void;
-  setAmbient: (rms: number) => void;
+  recording: PcmData | null;
+  setRecording: (pcm: PcmData) => void;
   reset: () => void;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [recordings, setRecordings] = useState<SessionState['recordings']>({});
-  const [ambientRms, setAmbientRms] = useState<number | null>(null);
-
-  const setRecording = useCallback((kind: TaskKind, pcm: PcmData) => {
-    setRecordings((prev) => ({ ...prev, [kind]: pcm }));
-  }, []);
-  const clearRecording = useCallback((kind: TaskKind) => {
-    setRecordings((prev) => {
-      const next = { ...prev };
-      delete next[kind];
-      return next;
-    });
-  }, []);
-  const setAmbient = useCallback((rms: number) => setAmbientRms(rms), []);
-  const reset = useCallback(() => {
-    setRecordings({});
-    setAmbientRms(null);
-  }, []);
-
-  const value = useMemo(
-    () => ({ recordings, ambientRms, setRecording, clearRecording, setAmbient, reset }),
-    [recordings, ambientRms, setRecording, clearRecording, setAmbient, reset],
-  );
+  const [recording, setRecording] = useState<PcmData | null>(null);
+  const reset = useCallback(() => setRecording(null), []);
+  const value = useMemo(() => ({ recording, setRecording, reset }), [recording, reset]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
@@ -51,6 +28,26 @@ export function useSession(): SessionState {
   const ctx = useContext(SessionContext);
   if (!ctx) throw new Error('useSession 必须在 SessionProvider 内使用');
   return ctx;
+}
+
+// ---- 本机偏好 ----
+const GENDER_KEY = 'hts-gender';
+
+export function loadGender(): Gender | null {
+  try {
+    const value = localStorage.getItem(GENDER_KEY);
+    return value === 'male' || value === 'female' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveGender(gender: Gender): void {
+  try {
+    localStorage.setItem(GENDER_KEY, gender);
+  } catch {
+    // localStorage 不可用时仍保留当前页面中的选择
+  }
 }
 
 // ---- 历史报告摘要（只存分数，不存音频） ----

@@ -1,8 +1,7 @@
 // 分析调用入口：优先 Web Worker（不卡 UI），Worker 不可用时退回主线程同步计算
 import { analyzeSongReport, type SongReport } from './song';
-import { analyzeTasks, type TaskInput } from './report';
-import type { AnalysisReport, PcmData } from './types';
-import type { SongJob, TasksJob } from './worker';
+import type { PcmData } from './types';
+import type { SongJob } from './worker';
 
 let worker: Worker | null | undefined;
 let nextId = 1;
@@ -32,7 +31,7 @@ function getWorker(): Worker | null {
   return worker;
 }
 
-function run<T>(job: Omit<SongJob, 'id'> | Omit<TasksJob, 'id'>, fallback: () => T): Promise<T> {
+function run<T>(job: Omit<SongJob, 'id'>, fallback: () => T): Promise<T> {
   const w = getWorker();
   if (!w) return Promise.resolve().then(fallback);
   const id = nextId++;
@@ -44,11 +43,7 @@ function run<T>(job: Omit<SongJob, 'id'> | Omit<TasksJob, 'id'>, fallback: () =>
 
 export function runSongAnalysis(pcm: PcmData): Promise<SongReport> {
   return run(
-    { type: 'song', samples: pcm.samples, sampleRate: pcm.sampleRate },
+    { samples: pcm.samples, sampleRate: pcm.sampleRate },
     () => analyzeSongReport(pcm),
   );
-}
-
-export function runTasksAnalysis(tasks: TaskInput[], ambientRms: number): Promise<AnalysisReport> {
-  return run({ type: 'tasks', tasks, ambientRms }, () => analyzeTasks(tasks, ambientRms));
 }

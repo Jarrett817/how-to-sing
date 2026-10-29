@@ -1,6 +1,6 @@
-// 音域 / 声部参考性估计。
-// 依据只有一段发声的基频范围与中位基频，因此结论必须标注为"参考"：
+// 音域 / 声部参考性估计。性别由用户选择，不再根据音高猜测。
 // 真正的声部划分还要看舒适音区（tessitura）、换声点与音色，单靠最高/最低音不够。
+import type { Gender } from './types';
 import { midiToName } from './song';
 
 interface VoiceType {
@@ -27,7 +27,7 @@ export interface VoiceRangeInfo {
   rangeText: string;
   /** 音域跨度（半音数） */
   spanSemitones: number;
-  /** 按中位音高估计的男/女声音区倾向 */
+  /** 用户选择的声部参考类别 */
   genderText: string;
   /** 最吻合的声部（参考）；跨度太小时为说明文字 */
   typeText: string;
@@ -50,7 +50,7 @@ function matchScore(low: number, high: number, t: VoiceType): number {
 
 export function classifyVoiceRange(
   f0Range: [number, number],
-  medianF0: number,
+  gender: Gender,
 ): VoiceRangeInfo | null {
   const [lo, hi] = f0Range;
   if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo <= 0 || hi <= lo) return null;
@@ -59,29 +59,14 @@ export function classifyVoiceRange(
   const highMidi = f0ToMidi(hi);
   const span = Math.round(highMidi - lowMidi);
   const rangeText = `${midiToName(Math.round(lowMidi))} – ${midiToName(Math.round(highMidi))}`;
-
-  // 中位基频分男/女声音区：150–190Hz 是男女声都可能出现的交界区，不硬判
-  const genderText = !Number.isFinite(medianF0)
-    ? '音区未知'
-    : medianF0 < 150
-      ? '更接近男声常见音区'
-      : medianF0 > 190
-        ? '更接近女声常见音区'
-        : '处于男女声交界音区';
-
-  const pool =
-    Number.isFinite(medianF0) && medianF0 < 150
-      ? MALE_TYPES
-      : Number.isFinite(medianF0) && medianF0 > 190
-        ? FEMALE_TYPES
-        : [...MALE_TYPES, ...FEMALE_TYPES];
+  const pool = gender === 'male' ? MALE_TYPES : FEMALE_TYPES;
   const best = pool.reduce((a, b) => (matchScore(lowMidi, highMidi, b) > matchScore(lowMidi, highMidi, a) ? b : a));
   const referenceText = `${best.name}常见音域约 ${midiToName(best.low)} – ${midiToName(best.high)}`;
 
   return {
     rangeText,
     spanSemitones: span,
-    genderText,
+    genderText: gender === 'male' ? '男声参考' : '女声参考',
     typeText:
       span >= 8 ? `最接近：${best.name}（参考）` : `本次只跨 ${span} 个半音，不足以判断声部`,
     referenceText,

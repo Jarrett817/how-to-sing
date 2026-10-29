@@ -1,9 +1,9 @@
 // 唱歌片段分析：合成信号验证音符切分 / 颤音 / 抗伴奏 / 端到端
 import { describe, expect, it } from 'vitest';
-import { ANALYSIS_RATE } from '../analyze';
 import { freqAxis, magnitudeSpectrum } from '../fft';
 import { hannWindow, applyWindow } from '../frames';
 import {
+  ANALYSIS_RATE,
   analyzeSong,
   analyzeSongReport,
   harmonicSalience,
@@ -198,23 +198,23 @@ describe('analyzeSongReport 端到端', () => {
 });
 
 describe('classifyVoiceRange 音区与声部参考', () => {
-  it('低中位基频与 E2–E4 音域识别为男低音参考', () => {
-    const result = classifyVoiceRange([82.41, 329.63], 120);
-    expect(result?.genderText).toBe('更接近男声常见音区');
+  it('选择男声时，E2–E4 音域识别为男低音参考', () => {
+    const result = classifyVoiceRange([82.41, 329.63], 'male');
+    expect(result?.genderText).toBe('男声参考');
     expect(result?.typeText).toContain('男低音');
     expect(result?.reliable).toBe(true);
   });
 
-  it('高中位基频与 C4–C6 音域识别为女高音参考', () => {
-    const result = classifyVoiceRange([261.63, 1046.5], 300);
-    expect(result?.genderText).toBe('更接近女声常见音区');
+  it('选择女声时，C4–C6 音域识别为女高音参考', () => {
+    const result = classifyVoiceRange([261.63, 1046.5], 'female');
+    expect(result?.genderText).toBe('女声参考');
     expect(result?.typeText).toContain('女高音');
     expect(result?.reliable).toBe(true);
   });
 
-  it('交界音区不硬判男女，跨度不足时不判断声部', () => {
-    const result = classifyVoiceRange([220, 246.94], 170);
-    expect(result?.genderText).toBe('处于男女声交界音区');
+  it('音域跨度不足时不判断声部', () => {
+    const result = classifyVoiceRange([220, 246.94], 'female');
+    expect(result?.genderText).toBe('女声参考');
     expect(result?.typeText).toContain('不足以判断声部');
     expect(result?.reliable).toBe(false);
   });

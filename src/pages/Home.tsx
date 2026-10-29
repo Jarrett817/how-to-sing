@@ -1,47 +1,21 @@
-// 首页：介绍 + 免责声明 + 环境噪声检测 + 开始
+// 首页：介绍 + 性别选择 + 唱歌分析入口
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, Music, ShieldCheck, TrendingUp, Volume2, Loader2 } from 'lucide-react';
+import { Music, ShieldCheck, TrendingUp, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { measureAmbient, releaseMic, requestMic } from '@/audio/recorder';
 import { HistoryChart } from '@/components/charts/HistoryChart';
-import { clearHistory, loadHistory, useSession } from '@/lib/session-store';
-
-type CheckState =
-  | { phase: 'idle' }
-  | { phase: 'measuring'; progress: number }
-  | { phase: 'done'; rms: number; quiet: boolean }
-  | { phase: 'error'; message: string };
-
-// 环境噪声阈值（线性 RMS）：超过则认为太吵，不建议检测
-const NOISY_RMS = 0.02;
+import { clearHistory, loadGender, loadHistory, saveGender } from '@/lib/session-store';
+import type { Gender } from '@/analysis/types';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { setAmbient } = useSession();
-  const [state, setState] = useState<CheckState>({ phase: 'idle' });
+  const [gender, setGender] = useState<Gender | null>(loadGender);
   const [history, setHistory] = useState(loadHistory);
 
-  const startCheck = async () => {
-    let stream: MediaStream;
-    try {
-      stream = await requestMic();
-    } catch (e) {
-      setState({
-        phase: 'error',
-        message: e instanceof Error ? e.message : '无法访问麦克风，请在浏览器中授权后重试',
-      });
-      return;
-    }
-    setState({ phase: 'measuring', progress: 0 });
-    const rms = await measureAmbient(stream, 2000, (p) =>
-      setState({ phase: 'measuring', progress: p * 100 }),
-    );
-    releaseMic(stream);
-    setAmbient(rms);
-    setState({ phase: 'done', rms, quiet: rms < NOISY_RMS });
+  const chooseGender = (value: Gender) => {
+    setGender(value);
+    saveGender(value);
   };
 
   return (
@@ -61,7 +35,7 @@ export default function Home() {
           </CardTitle>
           <CardDescription>
             所有录音只在你的浏览器内存中处理，不上传、不存储，刷新后即消失。
-            为展示个人趋势，只在本机保存各维度分数，随时可以清除。
+            性别和各维度分数只保存在本机，历史分数随时可以清除。
           </CardDescription>
         </CardHeader>
       </Card>
@@ -91,9 +65,31 @@ export default function Home() {
             不依赖安静环境。
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={() => navigate('/sing')}>
-            去唱歌（免环境检测）
+        <CardContent className="flex flex-col items-start gap-4">
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">开始前请选择性别</p>
+            <div className="flex gap-2" role="group" aria-label="性别">
+              <Button
+                type="button"
+                variant={gender === 'male' ? 'default' : 'outline'}
+                aria-pressed={gender === 'male'}
+                onClick={() => chooseGender('male')}
+              >
+                男
+              </Button>
+              <Button
+                type="button"
+                variant={gender === 'female' ? 'default' : 'outline'}
+                aria-pressed={gender === 'female'}
+                onClick={() => chooseGender('female')}
+              >
+                女
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs">用于匹配对应声部参考，选择会保存在本机</p>
+          </div>
+          <Button disabled={!gender} onClick={() => navigate('/sing')}>
+            开始唱歌
           </Button>
         </CardContent>
       </Card>
@@ -125,56 +121,6 @@ export default function Home() {
           </CardContent>
         </Card>
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Mic className="size-4" />
-            环境检测
-          </CardTitle>
-          <CardDescription>练声检测需要安静环境：先测 2 秒环境噪声，太吵会影响准确性</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start gap-4">
-          {state.phase === 'idle' && <Button onClick={startCheck}>开始环境检测</Button>}
-          {state.phase === 'measuring' && (
-            <div className="flex w-full flex-col gap-2">
-              <p className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Loader2 className="size-4 animate-spin" />
-                保持安静，正在采样…
-              </p>
-              <Progress value={state.progress} />
-            </div>
-          )}
-          {state.phase === 'done' && (
-            <div className="flex w-full flex-col gap-3">
-              <p className="text-sm">
-                {state.quiet
-                  ? '环境安静，可以开始检测。'
-                  : '环境噪声偏大，结果可能不准，建议换安静环境后重新检测。'}
-              </p>
-              <div className="flex gap-2">
-                <Button onClick={() => navigate('/session')} disabled={!state.quiet}>
-                  开始练声检测
-                </Button>
-                <Button variant="outline" onClick={startCheck}>
-                  重新检测
-                </Button>
-                {!state.quiet && (
-                  <Button variant="ghost" onClick={() => navigate('/session')}>
-                    仍要继续
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-          {state.phase === 'error' && (
-            <div className="flex flex-col gap-3">
-              <p className="text-destructive text-sm">{state.message}</p>
-              <Button onClick={startCheck}>重试</Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

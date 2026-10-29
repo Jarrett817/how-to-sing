@@ -4,10 +4,9 @@ import { fft, ifft, magnitudeSpectrum, nextPow2 } from '../fft';
 import { trackPitch, jitter } from '../pitch';
 import { envelopeCV, rmsEnvelope } from '../envelope';
 import { bandEnergies, ltas, harmonicAmplitudes } from '../spectrum';
-import { analyzeTask, ANALYSIS_RATE } from '../analyze';
 import { assessRecording } from '@/audio/quality';
 
-const RATE = ANALYSIS_RATE;
+const RATE = 22050;
 
 /** 合成谐波叠加信号：f0 基频，harmonics 为各次谐波幅度（从 H1 起） */
 function synth(f0: number, harmonics: number[], durationSec: number): Float32Array {
@@ -115,19 +114,6 @@ describe('spectrum', () => {
     expect(Number.isFinite(harmonics[1])).toBe(true);
     const h1h2 = harmonics[0] - harmonics[1];
     expect(Math.abs(h1h2 - 6.02)).toBeLessThan(2);
-  });
-});
-
-describe('analyzeTask 端到端（合成信号）', () => {
-  it('稳定长音：气息指标应为高分区间', () => {
-    const signal = synth(220, [1, 0.6, 0.4, 0.3, 0.2, 0.15], 4);
-    const result = analyzeTask({ samples: signal, sampleRate: RATE }, 'sustain');
-    expect(result.voicedRatio).toBeGreaterThan(0.7);
-    expect(Math.abs(result.medianF0 - 220)).toBeLessThan(3);
-    expect(result.envelopeCV).toBeLessThan(3);
-    expect(result.jitter).toBeLessThan(0.5);
-    expect(Number.isFinite(result.cpp)).toBe(true);
-    expect(result.bands.low + result.bands.mid + result.bands.high).toBeCloseTo(1, 2);
   });
 });
 

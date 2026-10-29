@@ -1,6 +1,6 @@
 // 个人历史趋势：同一维度多次检测的分数变化（和自己比，比绝对分更可靠）
 import { useState } from 'react';
-import { DIMENSIONS } from '@/pages/Report';
+import { DIMENSIONS } from '@/components/DimensionCard';
 import { historyBaselines, type ReportSummary } from '@/lib/session-store';
 
 const W = 640;

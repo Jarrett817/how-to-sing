@@ -8,19 +8,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { RadarChart } from '@/components/charts/RadarChart';
 import { EnvelopeChart } from '@/components/charts/EnvelopeChart';
 import { NoteChart } from '@/components/charts/NoteChart';
-import { DimensionCard } from '@/components/DimensionCard';
+import { DIMENSIONS, DimensionCard } from '@/components/DimensionCard';
 import { MetricHelp } from '@/components/MetricHelp';
 import { QualityNotice } from '@/components/QualityNotice';
 import { runSongAnalysis } from '@/analysis/client';
 import type { SongReport } from '@/analysis/song';
 import { classifyVoiceRange } from '@/analysis/voice-range';
 import { playSegment, stopPlayback } from '@/audio/playback';
-import { historyBaselines, loadHistory, saveReportSummary, useSession } from '@/lib/session-store';
-import { DIMENSIONS } from '@/pages/Report';
+import { historyBaselines, loadGender, loadHistory, saveReportSummary, useSession } from '@/lib/session-store';
 
 export default function SongReport() {
-  const { recordings, reset } = useSession();
-  const pcm = recordings.song;
+  const { recording: pcm, reset } = useSession();
+  const [gender] = useState(loadGender);
   const [report, setReport] = useState<SongReport | null>(null);
   const [playingIdx, setPlayingIdx] = useState(-1);
   const savedRef = useRef(false);
@@ -78,7 +77,7 @@ export default function SongReport() {
   }
 
   const { song } = report;
-  const voice = classifyVoiceRange(song.f0Range, song.medianF0);
+  const voice = gender ? classifyVoiceRange(song.f0Range, gender) : null;
   const radarItems = DIMENSIONS.map((d) => ({
     label: d.label,
     score: report.dimensions[d.key as keyof typeof report.dimensions].score,
@@ -158,11 +157,11 @@ export default function SongReport() {
           <div className="flex items-center gap-1">
             <CardTitle className="text-base">七维总览</CardTitle>
             <MetricHelp title="七维总览怎么看">
-              <p>与练声报告同一套维度。雷达图越靠外分数越高，停在中心的维度是"数据不足"（通常因为伴奏盖过人声），不是零分。</p>
+              <p>雷达图越靠外分数越高，停在中心的维度是"数据不足"（通常因为伴奏盖过人声），不是零分。</p>
               <p>分数来自通用经验阈值，更有价值的是和自己过去的形状对比。每张卡片标题旁的问号有该维度的详细说明。</p>
             </MetricHelp>
           </div>
-          <CardDescription>与练声报告同一套维度；伴奏干扰大的维度会标"数据不足"</CardDescription>
+          <CardDescription>伴奏干扰大的维度会标"数据不足"</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
           <RadarChart items={radarItems} />
@@ -260,8 +259,8 @@ export default function SongReport() {
               <CardTitle className="text-base">音域与声部</CardTitle>
               <MetricHelp title="音域与声部怎么判断">
                 <p>音域 = 这段演唱中唱到的最低音与最高音；声部是把这段音域与各声部常见实用音域匹配后的最吻合项。</p>
-                <p>男/女声音区按中位音高估计：低于约 150Hz 偏男声，高于约 190Hz 偏女声，之间不硬判。</p>
-                <p>一段歌曲的音域由歌决定，不代表你的极限音域。想测真实音域和声部，请用练声模式里的"爬音阶"，从舒服的低音唱到不舒服就停。</p>
+                <p>声部参考使用你在首页选择的性别，不再根据音高猜测性别。</p>
+                <p>一段歌曲的音域由歌决定，不代表你的极限音域；这里的声部仅是音域匹配参考。</p>
               </MetricHelp>
             </div>
           </CardHeader>
@@ -289,7 +288,7 @@ export default function SongReport() {
               <MetricHelp title="响度包络怎么看">
                 <p>横轴时间、纵轴响度。乐句之间的下凹通常是换气点，可以检查换气是否打断了乐句。</p>
                 <p>看乐句内部：越平气息越稳；开头冲高后快速下滑 = 起音泄气太多；结尾塌陷 = 后段支撑不足。</p>
-                <p>有伴奏时这条线包含伴奏能量，只适合看大体走势，精确的气息评估请以练声模式的长音为准。</p>
+                <p>有伴奏时这条线包含伴奏能量，只适合看大体走势。</p>
               </MetricHelp>
             </div>
             <CardDescription>乐句之间的下凹是换气点；乐句内部越平气息越稳</CardDescription>

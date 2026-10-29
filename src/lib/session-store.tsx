@@ -76,6 +76,34 @@ export function saveReportSummary(report: Pick<AnalysisReport, 'dimensions' | 'm
   }
 }
 
+/** 各维度的个人历史中位数（数据不足的 -1 分不参与），用作"和自己比"的基线 */
+export function historyBaselines(history: ReportSummary[]): Record<string, number> {
+  const byDim = new Map<string, number[]>();
+  for (const item of history) {
+    for (const [k, v] of Object.entries(item.scores)) {
+      if (v < 0 || !Number.isFinite(v)) continue;
+      byDim.set(k, [...(byDim.get(k) ?? []), v]);
+    }
+  }
+  const out: Record<string, number> = {};
+  for (const [k, values] of byDim) {
+    values.sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    out[k] = Math.round(
+      values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2,
+    );
+  }
+  return out;
+}
+
+export function clearHistory(): void {
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {
+    // localStorage 不可用时静默忽略
+  }
+}
+
 export function loadHistory(): ReportSummary[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);

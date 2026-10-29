@@ -15,7 +15,8 @@ export const TASKS: TaskDef[] = [
   {
     kind: 'sustain',
     title: '长音「啊」',
-    instruction: '选一个你舒服的音高，用平稳的音量唱「啊——」，尽量保持响度不变',
+    instruction:
+      '选一个你舒服的音高，用平稳的音量唱「啊——」，尽量保持响度不变。请用「啊」（/a/）元音：不同元音的频谱差异很大，统一元音才能让你的多次检测结果互相可比',
     purpose: '气息稳定度、挤卡、腔体',
     durationMs: 5000,
   },
@@ -28,8 +29,9 @@ export const TASKS: TaskDef[] = [
   },
   {
     kind: 'scale',
-    title: '爬音阶「咪」',
-    instruction: '用「咪」从低音开始一级一级爬到你舒适的最高音，再降下来',
+    title: '爬音阶「啊」',
+    instruction:
+      '继续用「啊」元音，从低音开始一级一级爬到你舒适的最高音，再降下来。不要硬顶高音，到不舒服的音就停',
     purpose: '声音位置、中低高频分布',
     durationMs: 10000,
   },

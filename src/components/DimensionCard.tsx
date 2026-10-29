@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import type { DimensionScore } from '@/analysis/types';
+import { MetricHelp } from '@/components/MetricHelp';
 
 const LEVEL_TEXT: Record<string, string> = { good: '良好', fair: '一般', poor: '待改进' };
 
@@ -37,12 +38,31 @@ function fmtRaw(key: string, value: number): { label: string; text: string } {
   return { label: meta.label, text: `${v.toFixed(meta.digits ?? 1)} ${meta.unit}`.trim() };
 }
 
-export function DimensionCard({ label, desc, dim }: { label: string; desc?: string; dim: DimensionScore }) {
+interface DimensionCardProps {
+  label: string;
+  desc?: string;
+  /** 问号弹框里的完整说明（\n 分段） */
+  help?: string;
+  /** 个人历史中位数（同维度），用于"和自己比" */
+  baseline?: number;
+  dim: DimensionScore;
+}
+
+export function DimensionCard({ label, desc, help, baseline, dim }: DimensionCardProps) {
+  const delta =
+    dim.score >= 0 && baseline != null && Number.isFinite(baseline) ? dim.score - baseline : null;
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{label}</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <CardTitle className="text-base">{label}</CardTitle>
+            {help && (
+              <MetricHelp title={label}>
+                <p className="whitespace-pre-line">{help}</p>
+              </MetricHelp>
+            )}
+          </div>
           <Badge variant={levelVariant(dim.score, dim.level)}>
             {dim.score < 0 ? '数据不足' : `${dim.score} 分 · ${LEVEL_TEXT[dim.level]}`}
           </Badge>
@@ -51,6 +71,11 @@ export function DimensionCard({ label, desc, dim }: { label: string; desc?: stri
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {dim.score >= 0 && <Progress value={dim.score} />}
+        {delta != null && (
+          <p className="text-muted-foreground text-xs">
+            你的历史中位数 {baseline} 分 · 本次{delta > 0 ? `高 ${delta} 分` : delta < 0 ? `低 ${-delta} 分` : '持平'}
+          </p>
+        )}
         <p className="text-muted-foreground text-sm">{dim.hint}</p>
         <dl className="text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {Object.entries(dim.raw).map(([k, v]) => {

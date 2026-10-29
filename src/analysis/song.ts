@@ -19,7 +19,7 @@ import { cpp as calcCpp } from './cepstrum';
 import { autocorrelate, levinson, lpcSpectrum, pickFormants } from './lpc';
 import { rmsEnvelope } from './envelope';
 import { ANALYSIS_RATE } from './analyze';
-import { THRESHOLDS, bandScore, levelOf, linmap, weightedMean } from './thresholds';
+import { THRESHOLDS, bandScore, h1h2Range, levelOf, linmap, weightedMean } from './thresholds';
 
 const FRAME_SIZE = 2048;
 const HOP_SIZE = 512;
@@ -84,8 +84,12 @@ export interface SongResult {
   envelope: { times: number[]; rms: number[] };
   notes: NoteSegment[];
   vibrato: VibratoInfo;
-  /** 平均音准绝对偏差（音分） */
+  /** 平均音高绝对偏差（音分，含整体起音偏移） */
   pitchAccuracy: number;
+  /** 整体起音偏移（音分，时长加权有符号平均）：整段起高/起低多少 */
+  pitchOffset: number;
+  /** 扣除整体偏移后的音高偏差（音分）：真正反映音准控制能力 */
+  pitchStability: number;
   phrases: PhraseSegment[];
   /** 乐句 CV 中位数（气息稳定度） */
   phraseCV: number;
@@ -533,15 +537,31 @@ export function analyzeSong(pcm: PcmData): SongResult {
       vibExtents.push(v.extent);
     }
   }
+  // 音准拆成两个口径：
+  //   整体偏移 = 各音符偏差的有符号平均（起音起高/起低多少，与"唱得稳不稳"无关）；
+  //   去偏移偏差 = 各音符相对整体偏移的偏离（真正的音准控制能力）。
+  // 只看"离最近半音多远"会把整体起高 30 音分但唱得很稳的人误判为音准差。
   let accDev = 0;
+  let accSigned = 0;
   let accDur = 0;
   for (const note of tracked) {
     const dur = note.endSec - note.startSec;
     if (dur < 0.15) continue;
     accDev += Math.abs(note.centsDev) * dur;
+    accSigned += note.centsDev * dur;
     accDur += dur;
   }
   const pitchAccuracy = accDur > 0 ? accDev / accDur : NaN;
+  const pitchOffset = accDur > 0 ? accSigned / accDur : NaN;
+  let accResid = 0;
+  if (accDur > 0) {
+    for (const note of tracked) {
+      const dur = note.endSec - note.startSec;
+      if (dur < 0.15) continue;
+      accResid += Math.abs(note.centsDev - pitchOffset) * dur;
+    }
+  }
+  const pitchStability = accDur > 0 ? accResid / accDur : NaN;
 
   const { jitter, shimmer } = noteStability(tracked, statFrames, frameRms);
 
@@ -563,6 +583,8 @@ export function analyzeSong(pcm: PcmData): SongResult {
     notes,
     vibrato: { rate: median(vibRates), extent: median(vibExtents) },
     pitchAccuracy,
+    pitchOffset,
+    pitchStability,
     phrases,
     phraseCV,
     jitter,
@@ -618,9 +640,11 @@ function songBreath(s: SongResult): DimensionScore {
 function songStrain(s: SongResult): DimensionScore {
   if (s.dominantFrames < MIN_DOMINANT_FRAMES) return insufficient(ACCOMPANIMENT_HINT);
   const T = THRESHOLDS.strain;
+  // 与练声一致：H1-H2 按中位基频分档，避免高音被误判为挤卡
+  const hRange = h1h2Range(s.medianF0);
   const score = weightedMean([
     [linmap(s.cpp, T.cppBad, 0, T.cppGood, 100), T.wCpp],
-    [linmap(s.h1h2, T.h1h2Bad, 0, T.h1h2Good, 100), T.wH1h2],
+    [linmap(s.h1h2, hRange.bad, 0, hRange.good, 100), T.wH1h2],
     [linmap(s.jitter, T.jitterGood, 100, T.jitterBad, 0), T.wJitter],
   ]);
   if (!Number.isFinite(score)) return insufficient('数据不足，无法计算紧张度指标');

@@ -1,6 +1,6 @@
 // 七个维度的评分：TaskResult → DimensionScore
 import type { DimensionScore, TaskResult } from './types';
-import { THRESHOLDS, bandScore, levelOf, linmap, weightedMean } from './thresholds';
+import { THRESHOLDS, bandScore, h1h2Range, levelOf, linmap, weightedMean } from './thresholds';
 
 function insufficient(hint: string, raw: Record<string, number> = {}): DimensionScore {
   return { score: -1, raw, level: 'poor', hint };
@@ -36,7 +36,9 @@ export function strainScore(t: TaskResult | undefined): DimensionScore {
   if (!t || t.voicedRatio < 0.4) return insufficient('有效发声太短，无法判断紧张度');
   const T = THRESHOLDS.strain;
   const cppScore = linmap(t.cpp, T.cppBad, 0, T.cppGood, 100);
-  const h1h2Score = linmap(t.h1h2, T.h1h2Bad, 0, T.h1h2Good, 100);
+  // H1-H2 按本次发声的中位基频选参考区间，避免高音/女声被误判为挤卡
+  const hRange = h1h2Range(t.medianF0);
+  const h1h2Score = linmap(t.h1h2, hRange.bad, 0, hRange.good, 100);
   const jitterScore = linmap(t.jitter, T.jitterGood, 100, T.jitterBad, 0);
   const score = weightedMean([
     [cppScore, T.wCpp],

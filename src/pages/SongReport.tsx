@@ -1,4 +1,4 @@
-// 唱歌分析报告：七维评分（抗伴奏降级）+ 音准/颤音/音符图
+// 唱歌分析报告：七维评分（抗伴奏降级）+ 音准/颤音/音域/音符回放（分析在 Worker 中进行）
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -9,28 +9,42 @@ import { RadarChart } from '@/components/charts/RadarChart';
 import { EnvelopeChart } from '@/components/charts/EnvelopeChart';
 import { NoteChart } from '@/components/charts/NoteChart';
 import { DimensionCard } from '@/components/DimensionCard';
-import { analyzeSongReport, midiToName, type SongReport } from '@/analysis/song';
-import { saveReportSummary, useSession } from '@/lib/session-store';
+import { MetricHelp } from '@/components/MetricHelp';
+import { QualityNotice } from '@/components/QualityNotice';
+import { runSongAnalysis } from '@/analysis/client';
+import type { SongReport } from '@/analysis/song';
+import { classifyVoiceRange } from '@/analysis/voice-range';
+import { playSegment, stopPlayback } from '@/audio/playback';
+import { historyBaselines, loadHistory, saveReportSummary, useSession } from '@/lib/session-store';
 import { DIMENSIONS } from '@/pages/Report';
-
-function f0ToMidi(f0: number): number {
-  return Math.round(69 + 12 * Math.log2(f0 / 440));
-}
 
 export default function SongReport() {
   const { recordings, reset } = useSession();
   const pcm = recordings.song;
   const [report, setReport] = useState<SongReport | null>(null);
+  const [playingIdx, setPlayingIdx] = useState(-1);
   const savedRef = useRef(false);
+  // 在本次报告写入历史之前取一次，作为个人基线
+  const [history] = useState(() => loadHistory());
+  const baselines = historyBaselines(history);
 
-  // 分析较重（几十秒音频），先渲染 loading 再算
   useEffect(() => {
     if (!pcm) return;
-    const timer = window.setTimeout(() => {
-      setReport(analyzeSongReport(pcm));
-    }, 50);
-    return () => window.clearTimeout(timer);
+    let cancelled = false;
+    runSongAnalysis(pcm)
+      .then((r) => {
+        if (!cancelled) setReport(r);
+      })
+      .catch(() => {
+        if (!cancelled) setReport(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [pcm]);
+
+  // 离开报告页时停止回放
+  useEffect(() => () => stopPlayback(), []);
 
   useEffect(() => {
     if (report && !savedRef.current) {
@@ -64,11 +78,24 @@ export default function SongReport() {
   }
 
   const { song } = report;
+  const voice = classifyVoiceRange(song.f0Range, song.medianF0);
   const radarItems = DIMENSIONS.map((d) => ({
     label: d.label,
     score: report.dimensions[d.key as keyof typeof report.dimensions].score,
   }));
   const degraded = song.dominantRatio < 0.3 && song.voicedRatio > 0.2;
+
+  const handleNoteClick = (_note: (typeof song.notes)[number], index: number) => {
+    if (playingIdx === index) {
+      stopPlayback();
+      setPlayingIdx(-1);
+      return;
+    }
+    const note = song.notes[index];
+    // 前后各留一点余量，避免起音/收音被切得太生硬
+    playSegment(pcm, Math.max(0, note.startSec - 0.08), note.endSec + 0.2, () => setPlayingIdx(-1));
+    setPlayingIdx(index);
+  };
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10">
@@ -84,6 +111,8 @@ export default function SongReport() {
           <Button variant="outline">再唱一段</Button>
         </Link>
       </header>
+
+      <QualityNotice pcm={pcm} />
 
       {song.voicedRatio < 0.2 && (
         <Card>
@@ -117,7 +146,7 @@ export default function SongReport() {
               </li>
               <li>
                 <span className="text-foreground font-medium">计算指标</span>
-                ：音准 = 你唱的音离最近的标准音差多少；颤音 = 长音是否有规律地轻摇；气息 = 乐句内音量是否平稳；音色类维度 = 声音能量在不同频率上的分布。
+                ：音准 = 你唱的音离标准音差多少（拆成"整体起音偏移"和"扣除偏移后的偏差"两个数）；颤音 = 长音是否有规律地轻摇；气息 = 乐句内音量是否平稳；音色类维度 = 声音能量在不同频率上的分布。
               </li>
             </ol>
           </details>
@@ -126,7 +155,13 @@ export default function SongReport() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">七维总览</CardTitle>
+          <div className="flex items-center gap-1">
+            <CardTitle className="text-base">七维总览</CardTitle>
+            <MetricHelp title="七维总览怎么看">
+              <p>与练声报告同一套维度。雷达图越靠外分数越高，停在中心的维度是"数据不足"（通常因为伴奏盖过人声），不是零分。</p>
+              <p>分数来自通用经验阈值，更有价值的是和自己过去的形状对比。每张卡片标题旁的问号有该维度的详细说明。</p>
+            </MetricHelp>
+          </div>
           <CardDescription>与练声报告同一套维度；伴奏干扰大的维度会标"数据不足"</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
@@ -137,14 +172,21 @@ export default function SongReport() {
       {song.notes.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">音符与音准</CardTitle>
+            <div className="flex items-center gap-1">
+              <CardTitle className="text-base">音符与音准</CardTitle>
+              <MetricHelp title="音符图怎么看、怎么回放">
+                <p>每个色块是一个识别出的音符：横轴时间、纵轴音高，颜色表示它与最近标准音的偏差（绿 ≤15 音分，黄 ≤35，红 &gt;35；100 音分 = 半个音）。</p>
+                <p>点任意色块可以回放这一小段录音，再点一次停止。对照"听到的"和"看到的"偏差，是最直接的音准练习方式。</p>
+                <p>注意：色块颜色包含整体起音偏移。如果整段都偏黄偏红但"扣除偏移后的音准偏差"很小，说明你只是起音起高/起低了，音准控制本身没问题。</p>
+                <p>滑音、转音和过短的装饰音不参与统计，伴奏盖过人声的片段也会被剔除。</p>
+              </MetricHelp>
+            </div>
             <CardDescription>
-              每个色块是你唱的一个音符，高度=音高。绿色=准（偏差≤15音分） 黄色=略偏（≤35）
-              红色=明显偏（&gt;35）；100 音分 = 半个音（do 到 do# 的距离）
+              高度=音高，颜色=偏差；点击色块回放该音符（再点一次停止）
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <NoteChart notes={song.notes} />
+            <NoteChart notes={song.notes} onNoteClick={handleNoteClick} activeIndex={playingIdx} />
           </CardContent>
         </Card>
       )}
@@ -152,30 +194,50 @@ export default function SongReport() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">音准</CardTitle>
+            <div className="flex items-center gap-1">
+              <CardTitle className="text-base">音准</CardTitle>
+              <MetricHelp title="音准的两个数分别是什么意思">
+                <p>扣除偏移后的偏差（大数字）：把整段的整体起音偏移去掉之后，每个音离它该在的位置还差多少。这才是"唱得稳不稳、准不准"的核心指标，越小越好。</p>
+                <p>整体起音偏移（小字）：整段演唱平均起高（+）或起低（−）了多少音分。它反映的是起音和定调，不是音准能力。</p>
+                <p>举例：整体起高 30 音分但每个音都唱得很稳的人，旧算法会显示"音准差"，新口径会显示偏移 +30、偏差很小——更符合实际。</p>
+                <p>没有原曲旋律作参照，所以这里衡量的是"与十二平均律标准音的贴合度"，不等于和原唱比对。</p>
+              </MetricHelp>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-1">
             <p className="text-2xl font-bold tabular-nums">
-              {Number.isFinite(song.pitchAccuracy) ? `±${song.pitchAccuracy.toFixed(0)}` : '—'}
+              {Number.isFinite(song.pitchStability) ? `±${song.pitchStability.toFixed(0)}` : '—'}
               <span className="text-muted-foreground text-sm font-normal"> 音分</span>
             </p>
             <p className="text-muted-foreground text-sm">
-              {!Number.isFinite(song.pitchAccuracy)
+              {!Number.isFinite(song.pitchStability)
                 ? '数据不足'
-                : song.pitchAccuracy <= 15
+                : song.pitchStability <= 15
                   ? '音准很好'
-                  : song.pitchAccuracy <= 35
+                  : song.pitchStability <= 35
                     ? '略有偏差，注意听伴奏定音'
                     : '偏差较大，先慢速跟唱找音高'}
             </p>
-            <p className="text-muted-foreground text-xs">
-              你唱的音与标准音的平均偏差，越小越准；100 音分 = 半个音
-            </p>
+            {Number.isFinite(song.pitchOffset) && (
+              <p className="text-muted-foreground text-xs tabular-nums">
+                整体起音偏移 {song.pitchOffset >= 0 ? '+' : ''}
+                {song.pitchOffset.toFixed(0)} 音分（{Math.abs(song.pitchOffset) < 10 ? '定调正常' : song.pitchOffset > 0 ? '整体起高' : '整体起低'}）
+              </p>
+            )}
+            <p className="text-muted-foreground text-xs">大数字已扣除整体偏移；100 音分 = 半个音</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">颤音</CardTitle>
+            <div className="flex items-center gap-1">
+              <CardTitle className="text-base">颤音</CardTitle>
+              <MetricHelp title="颤音速率和幅度怎么看">
+                <p>颤音是长音有规律地轻摇。速率（Hz）表示每秒摇几次，幅度（音分）表示摇多大。</p>
+                <p>算法：对每个足够长的音符，先去掉整体滑音/漂移趋势，再对音高曲线做自相关，在 4–8Hz 区间找周期性。</p>
+                <p>自然颤音大多在 4.5–7Hz、幅度 ±50–100 音分。过慢像摇晃、过快常伴随发紧；没有颤音不等于差，长直音可以是刻意处理。</p>
+                <p>短音符、转音不参与检测；伴奏太强的片段也不算。</p>
+              </MetricHelp>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-1">
             <p className="text-2xl font-bold tabular-nums">
@@ -194,21 +256,26 @@ export default function SongReport() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">音域</CardTitle>
+            <div className="flex items-center gap-1">
+              <CardTitle className="text-base">音域与声部</CardTitle>
+              <MetricHelp title="音域与声部怎么判断">
+                <p>音域 = 这段演唱中唱到的最低音与最高音；声部是把这段音域与各声部常见实用音域匹配后的最吻合项。</p>
+                <p>男/女声音区按中位音高估计：低于约 150Hz 偏男声，高于约 190Hz 偏女声，之间不硬判。</p>
+                <p>一段歌曲的音域由歌决定，不代表你的极限音域。想测真实音域和声部，请用练声模式里的"爬音阶"，从舒服的低音唱到不舒服就停。</p>
+              </MetricHelp>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-1">
             <p className="text-2xl font-bold tabular-nums">
-              {Number.isFinite(song.f0Range[0])
-                ? `${midiToName(f0ToMidi(song.f0Range[0]))} – ${midiToName(f0ToMidi(song.f0Range[1]))}`
-                : '—'}
+              {voice ? voice.rangeText : '—'}
             </p>
             <p className="text-muted-foreground text-sm">
-              {song.notes.length > 0
-                ? `共 ${song.notes.length} 个音符 · ${song.phrases.length} 个乐句`
-                : '未识别到稳定音符'}
+              {voice ? `${voice.genderText} · ${voice.typeText}` : '未识别到稳定音符'}
             </p>
             <p className="text-muted-foreground text-xs">
-              这段演唱中你唱到的最低音 – 最高音
+              {voice
+                ? `${voice.referenceText}；共 ${song.notes.length} 个音符 · ${song.phrases.length} 个乐句`
+                : '换一段旋律完整的录音再试'}
             </p>
           </CardContent>
         </Card>
@@ -217,7 +284,14 @@ export default function SongReport() {
       {song.envelope.times.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">响度包络</CardTitle>
+            <div className="flex items-center gap-1">
+              <CardTitle className="text-base">响度包络</CardTitle>
+              <MetricHelp title="响度包络怎么看">
+                <p>横轴时间、纵轴响度。乐句之间的下凹通常是换气点，可以检查换气是否打断了乐句。</p>
+                <p>看乐句内部：越平气息越稳；开头冲高后快速下滑 = 起音泄气太多；结尾塌陷 = 后段支撑不足。</p>
+                <p>有伴奏时这条线包含伴奏能量，只适合看大体走势，精确的气息评估请以练声模式的长音为准。</p>
+              </MetricHelp>
+            </div>
             <CardDescription>乐句之间的下凹是换气点；乐句内部越平气息越稳</CardDescription>
           </CardHeader>
           <CardContent>
@@ -232,6 +306,8 @@ export default function SongReport() {
             key={d.key}
             label={d.label}
             desc={d.desc}
+            help={d.help}
+            baseline={baselines[d.key]}
             dim={report.dimensions[d.key as keyof typeof report.dimensions]}
           />
         ))}
@@ -243,7 +319,7 @@ export default function SongReport() {
       </div>
 
       <p className="text-muted-foreground text-center text-xs">
-        本报告为声学特征启发式分析，有伴奏时频谱类指标基于人声主导帧与梳状滤波估计，精度有限，结果供参考
+        本报告为声学特征启发式分析，有伴奏时频谱类指标基于人声主导帧与梳状滤波估计，精度有限，结果供参考；不构成医疗诊断
       </p>
     </div>
   );

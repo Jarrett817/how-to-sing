@@ -5,6 +5,7 @@ import { trackPitch, jitter } from '../pitch';
 import { envelopeCV, rmsEnvelope } from '../envelope';
 import { bandEnergies, ltas, harmonicAmplitudes } from '../spectrum';
 import { analyzeTask, ANALYSIS_RATE } from '../analyze';
+import { assessRecording } from '@/audio/quality';
 
 const RATE = ANALYSIS_RATE;
 
@@ -127,5 +128,37 @@ describe('analyzeTask 端到端（合成信号）', () => {
     expect(result.jitter).toBeLessThan(0.5);
     expect(Number.isFinite(result.cpp)).toBe(true);
     expect(result.bands.low + result.bands.mid + result.bands.high).toBeCloseTo(1, 2);
+  });
+});
+
+describe('assessRecording 录音质量检查', () => {
+  it('满幅信号应提示削波', () => {
+    const result = assessRecording({
+      samples: new Float32Array(RATE).fill(1),
+      sampleRate: RATE,
+    });
+    expect(result.clippedRatio).toBe(1);
+    expect(result.issues.some((issue) => issue.includes('削波'))).toBe(true);
+  });
+
+  it('微弱信号应提示整体音量偏小', () => {
+    const samples = new Float32Array(RATE);
+    for (let i = 0; i < samples.length; i++) {
+      samples[i] = 0.001 * Math.sin((2 * Math.PI * 220 * i) / RATE);
+    }
+    const result = assessRecording({ samples, sampleRate: RATE });
+    expect(result.meanRms).toBeLessThan(0.004);
+    expect(result.issues.some((issue) => issue.includes('音量偏小'))).toBe(true);
+  });
+
+  it('安静帧与较响帧电平接近时应提示信噪比不足', () => {
+    const frameSize = Math.round(RATE * 0.05);
+    const samples = new Float32Array(frameSize * 40);
+    for (let frame = 0; frame < 40; frame++) {
+      samples.fill(frame % 2 === 0 ? 0.01 : 0.02, frame * frameSize, (frame + 1) * frameSize);
+    }
+    const result = assessRecording({ samples, sampleRate: RATE });
+    expect(result.snr).toBeLessThan(10);
+    expect(result.issues.some((issue) => issue.includes('信噪比'))).toBe(true);
   });
 });

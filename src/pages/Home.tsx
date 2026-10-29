@@ -1,12 +1,13 @@
 // 首页：介绍 + 免责声明 + 环境噪声检测 + 开始
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, Music, ShieldCheck, Volume2, Loader2 } from 'lucide-react';
+import { Mic, Music, ShieldCheck, TrendingUp, Volume2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { measureAmbient, releaseMic, requestMic } from '@/audio/recorder';
-import { useSession } from '@/lib/session-store';
+import { HistoryChart } from '@/components/charts/HistoryChart';
+import { clearHistory, loadHistory, useSession } from '@/lib/session-store';
 
 type CheckState =
   | { phase: 'idle' }
@@ -21,6 +22,7 @@ export default function Home() {
   const navigate = useNavigate();
   const { setAmbient } = useSession();
   const [state, setState] = useState<CheckState>({ phase: 'idle' });
+  const [history, setHistory] = useState(loadHistory);
 
   const startCheck = async () => {
     let stream: MediaStream;
@@ -58,7 +60,8 @@ export default function Home() {
             隐私说明
           </CardTitle>
           <CardDescription>
-            所有录音只在你的浏览器内存中处理，不上传、不存储。刷新页面后录音即消失。
+            所有录音只在你的浏览器内存中处理，不上传、不存储，刷新后即消失。
+            为展示个人趋势，只在本机保存各维度分数，随时可以清除。
           </CardDescription>
         </CardHeader>
       </Card>
@@ -94,6 +97,34 @@ export default function Home() {
           </Button>
         </CardContent>
       </Card>
+
+      {history.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp className="size-4" />
+              你的历史趋势
+            </CardTitle>
+            <CardDescription>
+              绝对分会受录音设备和状态影响，长期趋势更适合观察自己的变化。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <HistoryChart history={history} />
+            <Button
+              variant="ghost"
+              className="self-start"
+              onClick={() => {
+                if (!window.confirm('确定清除本机保存的全部历史分数吗？此操作无法撤销。')) return;
+                clearHistory();
+                setHistory([]);
+              }}
+            >
+              清除历史分数
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

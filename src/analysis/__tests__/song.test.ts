@@ -10,6 +10,7 @@ import {
   segmentNotes,
 } from '../song';
 import { trackPitch } from '../pitch';
+import { classifyVoiceRange } from '../voice-range';
 
 const RATE = ANALYSIS_RATE;
 
@@ -178,5 +179,43 @@ describe('analyzeSongReport 端到端', () => {
     expect(report.dimensions.strain.score).toBeGreaterThan(0);
     expect(Number.isFinite(report.song.pitchAccuracy)).toBe(true);
     expect(report.song.pitchAccuracy).toBeLessThan(15);
+  });
+
+  it('整段起高 40 音分：保留整体偏移，但去偏移后的偏差应很小', () => {
+    const offset = 2 ** (40 / 1200);
+    const signal = melody([
+      { f0: 220 * offset, dur: 1.2, gap: 0.3 },
+      { f0: 246.94 * offset, dur: 1.2, gap: 0.3 },
+      { f0: 261.63 * offset, dur: 1.2 },
+    ]);
+    const result = analyzeSong({ samples: signal, sampleRate: RATE });
+    expect(result.pitchOffset).toBeGreaterThan(30);
+    expect(result.pitchOffset).toBeLessThan(50);
+    expect(result.pitchAccuracy).toBeGreaterThan(30);
+    expect(result.pitchStability).toBeLessThan(12);
+    expect(result.pitchStability).toBeLessThan(result.pitchAccuracy);
+  });
+});
+
+describe('classifyVoiceRange 音区与声部参考', () => {
+  it('低中位基频与 E2–E4 音域识别为男低音参考', () => {
+    const result = classifyVoiceRange([82.41, 329.63], 120);
+    expect(result?.genderText).toBe('更接近男声常见音区');
+    expect(result?.typeText).toContain('男低音');
+    expect(result?.reliable).toBe(true);
+  });
+
+  it('高中位基频与 C4–C6 音域识别为女高音参考', () => {
+    const result = classifyVoiceRange([261.63, 1046.5], 300);
+    expect(result?.genderText).toBe('更接近女声常见音区');
+    expect(result?.typeText).toContain('女高音');
+    expect(result?.reliable).toBe(true);
+  });
+
+  it('交界音区不硬判男女，跨度不足时不判断声部', () => {
+    const result = classifyVoiceRange([220, 246.94], 170);
+    expect(result?.genderText).toBe('处于男女声交界音区');
+    expect(result?.typeText).toContain('不足以判断声部');
+    expect(result?.reliable).toBe(false);
   });
 });

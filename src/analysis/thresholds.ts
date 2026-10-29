@@ -73,6 +73,19 @@ export const THRESHOLDS = {
   },
 } as const;
 
+/**
+ * H1-H2 参考区间随基频分档。
+ * 原因：H1-H2 不是纯粹的"松紧"量——音高升高时 H2 相对 H1 天然减弱，
+ * 女声整体又普遍高于男声。用同一套阈值会把高音/女声系统性地误判为挤卡。
+ * 分档边界：165Hz（约 E3，男声常用区上沿）、260Hz（约 C4，女声常用区下沿）。
+ * 数值仍是经验值，未经样本标定；跨档比较分数没有意义，只看同人同音区的变化。
+ */
+export function h1h2Range(f0: number): { good: number; bad: number } {
+  if (!Number.isFinite(f0) || f0 < 165) return { good: 2, bad: -4 };
+  if (f0 < 260) return { good: 0, bad: -6 };
+  return { good: -2, bad: -8 };
+}
+
 /** 频段得分：在参考区间内 100 分，偏离线性衰减 */
 export function bandScore(ratio: number, range: { min: number; max: number }): number {
   const dist = ratio < range.min ? range.min - ratio : ratio > range.max ? ratio - range.max : 0;

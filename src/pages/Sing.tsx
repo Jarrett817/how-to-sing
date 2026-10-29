@@ -99,7 +99,7 @@ export default function Sing() {
     try {
       const pcm = await handle.stop();
       if (pcm.samples.length / pcm.sampleRate < MIN_MS / 1000) {
-        setMicError(`录音太短（至少 ${MIN_MS / 1000} 秒），请唱完整一两句再停止`);
+        setMicError(`录音时长不足 ${MIN_MS / 1000} 秒`);
         setPhase('idle');
         return;
       }
@@ -144,8 +144,8 @@ export default function Sing() {
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-10">
       <header>
         <p className="text-primary text-[10px] font-medium tracking-[0.24em]">RECORDING STUDIO</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">唱一段，听见细节</h1>
-        <p className="text-muted-foreground mt-2 text-sm">放松、自然地唱。接下来的复盘会精确到每一个乐句。</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">演唱录音</h1>
+        <p className="text-muted-foreground mt-2 text-sm">录制 {MIN_MS / 1000}–{MAX_MS / 1000} 秒音频，用于乐句和音符级分析。</p>
       </header>
       <Card className="overflow-hidden border-primary/15 py-0 shadow-lg shadow-indigo-950/5">
         <CardHeader className="bg-gradient-to-br from-slate-950 to-indigo-950 px-6 py-7 text-white">
@@ -153,18 +153,17 @@ export default function Sing() {
             <span className={`flex size-11 items-center justify-center rounded-2xl bg-white/10 ${phase === 'recording' ? 'animate-pulse text-rose-300' : 'text-violet-300'}`}>
               <Music className="size-5" />
             </span>
-            {phase === 'recording' ? '正在聆听你的演唱' : '准备好后，开始演唱'}
+            {phase === 'recording' ? '录音中' : '演唱录音'}
           </CardTitle>
           <CardDescription className="leading-6 text-slate-400">
-            清唱或跟着 KTV 伴奏唱都可以。分析只针对你的人声：会自动锁定你的音高，
-            剔除伴奏占主导的片段；伴奏太盖过人声时会提示而不是硬算。
+            支持清唱或 KTV 伴奏。系统识别人声音高，伴奏占主导的片段将标记为低可信。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5 px-6 pb-7">
           <ul className="text-muted-foreground flex flex-col gap-1 text-sm">
-            <li>· 唱 {MIN_MS / 1000}–{MAX_MS / 1000} 秒，包含一两句完整的歌词效果最好</li>
-            <li>· 有伴奏时：麦克风离嘴近一点（15–30cm），离音箱远一点</li>
-            <li>· 正常唱即可，不用刻意大声</li>
+            <li>· 时长 {MIN_MS / 1000}–{MAX_MS / 1000} 秒，包含完整乐句</li>
+            <li>· 有伴奏时，麦克风距离嘴部 15–30 cm，并远离音箱</li>
+            <li>· 保持正常演唱音量</li>
           </ul>
 
           {stream && phase === 'idle' && (
@@ -180,7 +179,7 @@ export default function Sing() {
                 </div>
               </div>
               <p className="text-muted-foreground text-xs">
-                试着说句话或唱一句，音量条应随之跳动；如果一直不动，请检查系统麦克风权限和输入设备。
+                音量条无变化时，请检查麦克风权限和输入设备。
               </p>
             </div>
           )}
@@ -248,7 +247,6 @@ export default function Sing() {
         </CardContent>
       </Card>
 
-      <p className="text-muted-foreground text-center text-sm">录音只在本机内存处理，不会上传</p>
     </div>
   );
 }

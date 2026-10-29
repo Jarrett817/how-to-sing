@@ -612,11 +612,10 @@ function insufficient(hint: string, raw: Record<string, number> = {}): Dimension
   return { score: -1, raw, level: 'poor', hint };
 }
 
-const ACCOMPANIMENT_HINT =
-  '伴奏声压过了人声，无法可靠分析。建议清唱，或离音箱远一点、麦克风离嘴近一点再录';
+const ACCOMPANIMENT_HINT = '伴奏占主导片段过多，频谱类指标可信度不足';
 
 function songBreath(s: SongResult): DimensionScore {
-  if (s.phrases.length === 0) return insufficient('没识别到完整乐句，请连贯地唱几句');
+  if (s.phrases.length === 0) return insufficient('未识别到完整乐句');
   const cvScore = linmap(s.phraseCV, PHRASE_CV_GOOD, 100, PHRASE_CV_BAD, 0);
   const shimmerScore = linmap(s.shimmer, THRESHOLDS.breath.shimmerGood, 100, THRESHOLDS.breath.shimmerBad, 0);
   const score = weightedMean([
@@ -626,10 +625,10 @@ function songBreath(s: SongResult): DimensionScore {
   if (!Number.isFinite(score)) return insufficient('数据不足，无法计算气息指标');
   const hint =
     score >= 75
-      ? '乐句内响度稳定，气息支撑良好'
+      ? '乐句内响度稳定'
       : score >= 50
-        ? '乐句内响度有波动，注意乐句开头不要一次泄气'
-        : '乐句内响度明显不稳，建议先练长音再带歌词';
+        ? '乐句内响度存在波动'
+        : '乐句内响度波动较大';
   return {
     score: Math.round(score),
     raw: { phraseCV: s.phraseCV, shimmer: s.shimmer },
@@ -651,10 +650,10 @@ function songStrain(s: SongResult): DimensionScore {
   if (!Number.isFinite(score)) return insufficient('数据不足，无法计算紧张度指标');
   const hint =
     score >= 75
-      ? '演唱中声带振动规律，没有明显挤压'
+      ? '振动规律性良好，未检测到明显紧张特征'
       : score >= 50
-        ? '演唱中有轻微紧张迹象，高音处留意喉部放松'
-        : '演唱中偏挤卡，避免扯嗓子，高音不要硬顶';
+        ? '存在轻微紧张特征'
+        : '紧张特征较明显';
   return {
     score: Math.round(score),
     raw: { cpp: s.cpp, h1h2: s.h1h2, jitter: s.jitter },
@@ -672,13 +671,13 @@ function songPlacement(s: SongResult): DimensionScore {
     [linmap(s.singerFormantRatio, T.sfBad, 0, T.sfGood, 100), T.wSF],
     [linmap(s.centroid, T.centroidBad, 0, T.centroidGood, 100), T.wCentroid],
   ]);
-  if (!Number.isFinite(score)) return insufficient('数据不足，无法判断声音位置');
+  if (!Number.isFinite(score)) return insufficient('数据不足，无法计算声音位置指标');
   const hint =
     score >= 75
-      ? '高频泛音充足，声音位置靠前、有穿透力'
+      ? '高频泛音与歌手共振峰占比较高'
       : score >= 50
-        ? '声音位置中等，咬字可以再靠前一些'
-        : '声音偏闷偏后，练习哼鸣找面罩振感';
+        ? '高频泛音占比中等'
+        : '高频泛音与歌手共振峰占比偏低';
   return {
     score: Math.round(score),
     raw: { singerFormantRatio: s.singerFormantRatio, centroid: s.centroid },
@@ -690,7 +689,7 @@ function songPlacement(s: SongResult): DimensionScore {
 function songResonance(s: SongResult): DimensionScore {
   if (s.dominantFrames < MIN_DOMINANT_FRAMES || !Number.isFinite(s.formants.f1Prom)) {
     return insufficient(
-      s.dominantFrames < MIN_DOMINANT_FRAMES ? ACCOMPANIMENT_HINT : '数据不足，无法估计共振腔体',
+      s.dominantFrames < MIN_DOMINANT_FRAMES ? ACCOMPANIMENT_HINT : '数据不足，无法估计共振峰',
     );
   }
   const prom =
@@ -700,10 +699,10 @@ function songResonance(s: SongResult): DimensionScore {
   const score = linmap(prom, THRESHOLDS.resonance.promBad, 0, THRESHOLDS.resonance.promGood, 100);
   const hint =
     score >= 75
-      ? '共振峰清晰，腔体成型良好'
+      ? 'F1/F2 共振峰突出度正常'
       : score >= 50
-        ? '腔体基本成型，咬字时保持口腔开度'
-        : '共鸣腔体不够充分，保持打哈欠的喉咙开度再咬字';
+        ? '共振峰突出度中等'
+        : '共振峰突出度偏低';
   return {
     score: Math.round(score),
     raw: {
@@ -748,9 +747,9 @@ function songBands(s: SongResult): {
     return { score: Math.round(score), raw: { ratio }, level: levelOf(score), hint };
   };
   return {
-    low: make(s.bands.low, B.low, '低频', '低频偏少，声音可能偏薄', '低频偏重，可能偏压喉'),
-    mid: make(s.bands.mid, B.mid, '中频', '中频偏少，人声"芯"不够', '中频占比正常'),
-    high: make(s.bands.high, B.high, '高频', '高频泛音不足，声音偏闷', '高频偏多，留意是否尖挤'),
+    low: make(s.bands.low, B.low, '低频', '低频能量占比偏低', '低频能量占比偏高'),
+    mid: make(s.bands.mid, B.mid, '中频', '中频能量占比偏低', '中频占比正常'),
+    high: make(s.bands.high, B.high, '高频', '高频泛音占比偏低', '高频能量占比偏高'),
   };
 }
 

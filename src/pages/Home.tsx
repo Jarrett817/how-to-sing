@@ -38,12 +38,12 @@ export default function Home() {
 
       <header className="grid items-center gap-8 py-6 lg:grid-cols-[1.15fr_.85fr] lg:py-10">
         <div>
-          <Badge variant="secondary" className="mb-5 px-3 py-1">你的私人声乐复盘室</Badge>
+          <Badge variant="secondary" className="mb-5 px-3 py-1">声乐分析与回放</Badge>
           <h1 className="max-w-xl text-4xl font-semibold leading-[1.12] tracking-[-0.04em] text-slate-950 sm:text-5xl">
-            听见声音，<br />也看见<span className="text-primary">进步。</span>
+            演唱声学<br /><span className="text-primary">分析报告</span>
           </h1>
           <p className="text-muted-foreground mt-5 max-w-lg text-base leading-7">
-            不只给一个分数。把音准、气息与共鸣放回演唱的时间轴里，知道哪一句唱得好，下一句该怎么调整。
+            按时间轴同步分析音准、气息与共鸣，并支持整段、乐句和单个音符回放。
           </p>
           <div className="text-muted-foreground mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <span className="flex items-center gap-1.5"><Activity className="text-primary size-4" />七维声学分析</span>
@@ -83,15 +83,15 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <span className="bg-primary/10 text-primary flex size-9 items-center justify-center rounded-xl"><Music className="size-4" /></span>
-              唱一段，开始今天的复盘
+              新建演唱分析
             </CardTitle>
             <CardDescription className="leading-6">
-              清唱或跟 KTV 伴奏唱都可以。自动锁定人声，分析音准、颤音、气息和发声状态。
+              支持清唱或跟 KTV 伴奏演唱。系统自动识别人声并生成音准、颤音、气息和发声状态报告。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
             <div className="rounded-2xl bg-muted/60 p-4">
-              <p className="text-sm font-medium">请选择你的性别</p>
+              <p className="text-sm font-medium">选择性别</p>
               <p className="text-muted-foreground mt-1 text-xs">用于匹配对应声部参考，选择会保存在本机</p>
               <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="性别">
                 <Button
@@ -124,19 +124,19 @@ export default function Home() {
         <div className="flex flex-col gap-5">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"><Volume2 className="text-primary size-4" />录出更可靠的声音</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base"><Volume2 className="text-primary size-4" />录音要求</CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground flex flex-col gap-3 text-sm">
-              <p><span className="text-primary mr-2 font-medium">01</span>在安静房间里，避开风扇与车流噪声</p>
-              <p><span className="text-primary mr-2 font-medium">02</span>距离麦克风 15–30 cm，不要贴着它</p>
-              <p><span className="text-primary mr-2 font-medium">03</span>自然演唱一两句完整歌词，无需刻意大声</p>
+              <p><span className="text-primary mr-2 font-medium">01</span>尽量避开风扇、车流等持续噪声</p>
+              <p><span className="text-primary mr-2 font-medium">02</span>麦克风距离保持在 15–30 cm</p>
+              <p><span className="text-primary mr-2 font-medium">03</span>录制一两句旋律完整的演唱</p>
             </CardContent>
           </Card>
           <Card className="bg-emerald-50/55 shadow-none">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="size-4 text-emerald-600" />声音只属于你</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="size-4 text-emerald-600" />本地处理</CardTitle>
               <CardDescription className="leading-6">
-                录音只在浏览器内存中处理，不上传、不存储，刷新后即消失。性别和历史分数仅保存在本机，可随时清除。
+                录音仅在浏览器内存中处理，不上传、不持久化；性别和历史分数保存在本机。
               </CardDescription>
             </CardHeader>
           </Card>
@@ -146,8 +146,8 @@ export default function Home() {
       {history.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="text-primary size-4" />你的历史趋势</CardTitle>
-            <CardDescription>绝对分会受录音设备和状态影响，长期趋势更适合观察自己的变化。</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="text-primary size-4" />历史趋势</CardTitle>
+            <CardDescription>绝对分受录音设备与状态影响，长期趋势更具参考价值。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <HistoryChart history={history} />
@@ -166,9 +166,6 @@ export default function Home() {
         </Card>
       )}
 
-      <footer className="text-muted-foreground pb-4 text-center text-xs">
-        声学特征分析不能替代声乐老师；阈值基于通用经验值，结果供练习参考
-      </footer>
     </div>
   );
 }

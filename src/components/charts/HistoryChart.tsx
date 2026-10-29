@@ -79,7 +79,7 @@ export function HistoryChart({ history }: { history: ReportSummary[] }) {
           {fmtDate(points[points.length - 1].createdAt)}
         </text>
       </svg>
-      <p className="text-muted-foreground text-xs">虚线为你的中位数；只保存分数，不保存音频</p>
+      <p className="text-muted-foreground text-xs">虚线为历史中位数；仅保存分数，不保存音频</p>
     </div>
   );
 }

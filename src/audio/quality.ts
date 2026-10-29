@@ -17,7 +17,7 @@ export function assessRecording(pcm: PcmData): RecordingQuality {
   const { samples, sampleRate } = pcm;
   const issues: string[] = [];
   if (samples.length === 0) {
-    return { clippedRatio: 0, meanRms: 0, snr: NaN, issues: ['录音为空，请重新录制'] };
+    return { clippedRatio: 0, meanRms: 0, snr: NaN, issues: ['录音数据为空'] };
   }
 
   let sumSq = 0;
@@ -49,17 +49,15 @@ export function assessRecording(pcm: PcmData): RecordingQuality {
 
   if (clippedRatio > 0.002) {
     issues.push(
-      `约 ${(clippedRatio * 100).toFixed(1)}% 的采样达到满幅（削波/爆音），频谱与抖动类指标会失真。建议离麦克风远一点，或在系统里调低输入音量后重录。`,
+      `约 ${(clippedRatio * 100).toFixed(1)}% 的采样达到满幅（削波），频谱与抖动类指标可信度降低。`,
     );
   }
   if (meanRms < 0.004) {
-    issues.push(
-      '整体音量偏小，有效信号不足。建议麦克风离嘴 15–30cm、正常音量发声，或调高系统输入音量后重录。',
-    );
+    issues.push('整体电平偏低，有效信号不足。');
   }
   if (Number.isFinite(snr) && snr < 10) {
     issues.push(
-      `背景噪声或伴奏偏大（估计信噪比约 ${snr.toFixed(0)} dB），音色类指标可能被污染。建议换安静环境、清唱，或让麦克风更靠近嘴。`,
+      `背景噪声或伴奏能量较高（估计信噪比约 ${snr.toFixed(0)} dB），音色类指标可信度降低。`,
     );
   }
 

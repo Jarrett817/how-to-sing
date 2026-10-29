@@ -127,14 +127,14 @@ describe('assessRecording 录音质量检查', () => {
     expect(result.issues.some((issue) => issue.includes('削波'))).toBe(true);
   });
 
-  it('微弱信号应提示整体音量偏小', () => {
+  it('微弱信号应提示整体电平偏低', () => {
     const samples = new Float32Array(RATE);
     for (let i = 0; i < samples.length; i++) {
       samples[i] = 0.001 * Math.sin((2 * Math.PI * 220 * i) / RATE);
     }
     const result = assessRecording({ samples, sampleRate: RATE });
     expect(result.meanRms).toBeLessThan(0.004);
-    expect(result.issues.some((issue) => issue.includes('音量偏小'))).toBe(true);
+    expect(result.issues.some((issue) => issue.includes('电平偏低'))).toBe(true);
   });
 
   it('安静帧与较响帧电平接近时应提示信噪比不足', () => {

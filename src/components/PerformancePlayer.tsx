@@ -30,7 +30,7 @@ function nearestValue(times: number[], values: number[], time: number): number {
 
 function pitchFeedback(cents: number) {
   const abs = Math.abs(cents);
-  if (abs <= 15) return { label: '音准很好', tone: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
+  if (abs <= 15) return { label: '偏差正常', tone: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
   if (abs <= 35) {
     return {
       label: cents > 0 ? '略偏高' : '略偏低',
@@ -126,8 +126,8 @@ export function PerformancePlayer({ pcm, song }: PerformancePlayerProps) {
             <Activity className="size-5" />
           </span>
           <div>
-            <CardTitle className="text-lg">逐句回放 · 动态复盘</CardTitle>
-            <CardDescription className="mt-1">选一段自己的演唱，边听边看音准与响度变化</CardDescription>
+            <CardTitle className="text-lg">乐句回放</CardTitle>
+            <CardDescription className="mt-1">播放位置与音符、音准偏差和响度同步</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -205,8 +205,8 @@ export function PerformancePlayer({ pcm, song }: PerformancePlayerProps) {
               {activeNote
                 ? `${activeNote.meanF0.toFixed(1)} Hz · 第 ${activeNoteIndex + 1} 个音`
                 : activePhraseIndex >= 0
-                  ? `第 ${activePhraseIndex + 1} 乐句 · 换气或过渡`
-                  : '播放到这里时显示音符'}
+                  ? `第 ${activePhraseIndex + 1} 乐句 · 过渡`
+                  : '无识别音符'}
             </p>
           </div>
           <div className={`rounded-2xl border p-4 ${feedback?.tone ?? 'border-border bg-muted/40'}`}>
@@ -215,7 +215,7 @@ export function PerformancePlayer({ pcm, song }: PerformancePlayerProps) {
               {activeNote ? `${activeNote.centsDev >= 0 ? '+' : ''}${activeNote.centsDev.toFixed(0)}` : '—'}
               <span className="ml-1 text-sm font-normal">音分</span>
             </p>
-            <p className="mt-1 text-xs">{feedback?.label ?? '等待进入有效音符'}</p>
+            <p className="mt-1 text-xs">{feedback?.label ?? '暂无数据'}</p>
           </div>
           <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-indigo-950">
             <p className="flex items-center gap-1.5 text-xs opacity-70"><Volume2 className="size-3.5" />当前响度</p>
@@ -232,7 +232,7 @@ export function PerformancePlayer({ pcm, song }: PerformancePlayerProps) {
           </div>
         </div>
         <p className="text-muted-foreground text-xs">
-          点击音符可听该音前后片段。偏差为当前完整音符的平均值；时间轴按识别到的乐句与音符联动，并非逐字歌词评分。
+          点击音符回放对应片段；偏差为该音符的完整平均值。时间轴按识别到的乐句和音符对齐。
         </p>
       </CardContent>
     </Card>

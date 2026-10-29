@@ -13,7 +13,7 @@ export function QualityNotice({ pcm }: { pcm: PcmData }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <TriangleAlert className="size-4 text-amber-500" />
-          这次录音质量有问题，分数可能不准
+          录音质量提示
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
@@ -22,7 +22,6 @@ export function QualityNotice({ pcm }: { pcm: PcmData }) {
             <li key={issue}>· {issue}</li>
           ))}
         </ul>
-        <p className="text-muted-foreground text-xs">建议按上面的提示重新录制，再看报告更有参考价值。</p>
       </CardContent>
     </Card>
   );

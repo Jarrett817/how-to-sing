@@ -93,6 +93,15 @@ function pickMimeType(): string | undefined {
   return undefined;
 }
 
+/** 音轨被系统抢占（来电、语音助手、其他录音应用）时给出可读错误 */
+function watchTrackInterruptions(stream: MediaStream, reject: (e: Error) => void): () => void {
+  const track = stream.getAudioTracks()[0];
+  if (!track) return () => {};
+  const onEnded = () => reject(new Error('麦克风被系统中断（来电或其他应用抢占），请重新录音。'));
+  track.addEventListener('ended', onEnded);
+  return () => track.removeEventListener('ended', onEnded);
+}
+
 /** 建一个实时电平监视器，返回停止函数 */
 function startLevelMonitor(stream: MediaStream, onLevel: (rms: number) => void): () => void {
   const ctx = audioContext();
@@ -153,21 +162,25 @@ export function recordPcm(
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     const chunks: Blob[] = [];
     const stopMonitor = onLevel ? startLevelMonitor(stream, onLevel) : () => {};
+    // 定时切片：移动端切后台/被系统回收时已产出的块仍可解码
+    const stopWatch = watchTrackInterruptions(stream, reject);
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
     recorder.onerror = () => {
       stopMonitor();
+      stopWatch();
       reject(new Error('录音失败'));
     };
     recorder.onstop = () => {
       stopMonitor();
+      stopWatch();
       const type = recorder.mimeType || mimeType || 'audio/webm';
       blobToPcm(new Blob(chunks, { type })).then(resolve, reject);
     };
 
-    recorder.start();
+    recorder.start(1000);
     window.setTimeout(() => {
       if (recorder.state !== 'inactive') recorder.stop();
     }, durationMs);
@@ -195,19 +208,24 @@ export function startRecording(
   const chunks: Blob[] = [];
   const stopMonitor = onLevel ? startLevelMonitor(stream, onLevel) : () => {};
   const startedAt = Date.now();
+  // 定时切片 + 中断监听，提升移动端存活率
+  let stopWatch: () => void = () => {};
 
   recorder.ondataavailable = (e) => {
     if (e.data.size > 0) chunks.push(e.data);
   };
-  recorder.start();
+  recorder.start(1000);
 
   const done = new Promise<PcmData>((resolve, reject) => {
+    stopWatch = watchTrackInterruptions(stream, reject);
     recorder.onerror = () => {
       stopMonitor();
+      stopWatch();
       reject(new Error('录音失败'));
     };
     recorder.onstop = () => {
       stopMonitor();
+      stopWatch();
       const type = recorder.mimeType || mimeType || 'audio/webm';
       blobToPcm(new Blob(chunks, { type })).then(resolve, reject);
     };

@@ -15,18 +15,20 @@ import { runSongAnalysis } from '@/analysis/client';
 import type { SongReport } from '@/analysis/song';
 import { classifyVoiceRange } from '@/analysis/voice-range';
 import { historyBaselines, loadGender, loadHistory, saveReportSummary, useSession } from '@/lib/session-store';
+import { saveSession } from '@/lib/storage';
 
 export default function SongReport() {
-  const { recording: pcm, reset } = useSession();
+  const { recording: pcm, storedReport, reset } = useSession();
   const [gender] = useState(loadGender);
-  const [report, setReport] = useState<SongReport | null>(null);
+  // 历史回看直接使用已存报告，不再重新分析
+  const [report, setReport] = useState<SongReport | null>(storedReport);
   const savedRef = useRef(false);
   // 在本次报告写入历史之前取一次，作为个人基线
   const [history] = useState(() => loadHistory());
   const baselines = historyBaselines(history);
 
   useEffect(() => {
-    if (!pcm) return;
+    if (!pcm || storedReport) return;
     let cancelled = false;
     runSongAnalysis(pcm)
       .then((r) => {
@@ -38,14 +40,16 @@ export default function SongReport() {
     return () => {
       cancelled = true;
     };
-  }, [pcm]);
+  }, [pcm, storedReport]);
 
   useEffect(() => {
-    if (report && !savedRef.current) {
-      saveReportSummary(report);
+    // 仅新录音写入：历史回看的报告已在存储中
+    if (report && pcm && !storedReport && !savedRef.current) {
       savedRef.current = true;
+      saveReportSummary(report);
+      void saveSession(pcm, report);
     }
-  }, [report]);
+  }, [report, pcm, storedReport]);
 
   if (!pcm) {
     return (

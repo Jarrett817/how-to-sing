@@ -1,22 +1,45 @@
 // 首页：介绍 + 性别选择 + 唱歌分析入口
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowRight, AudioLines, Music, ShieldCheck, TrendingUp, Volume2 } from 'lucide-react';
+import { Activity, ArrowRight, AudioLines, History, Music, ShieldCheck, Trash2, TrendingUp, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { HistoryChart } from '@/components/charts/HistoryChart';
-import { clearHistory, loadGender, loadHistory, saveGender } from '@/lib/session-store';
+import { clearHistory, loadGender, loadHistory, saveGender, useSession } from '@/lib/session-store';
+import { clearSessions, deleteSession, listSessions, type StoredSession } from '@/lib/storage';
 import type { Gender } from '@/analysis/types';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { loadSession } = useSession();
   const [gender, setGender] = useState<Gender | null>(loadGender);
   const [history, setHistory] = useState(loadHistory);
+  const [sessions, setSessions] = useState<StoredSession[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void listSessions().then((list) => {
+      if (active) setSessions(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const chooseGender = (value: Gender) => {
     setGender(value);
     saveGender(value);
+  };
+
+  const openSession = (session: StoredSession) => {
+    loadSession({ pcm: session.pcm, report: session.report, storedId: session.id });
+    navigate('/song-report');
+  };
+
+  const removeSession = async (id: string) => {
+    await deleteSession(id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
   };
 
   return (
@@ -136,12 +159,79 @@ export default function Home() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="size-4 text-emerald-600" />本地处理</CardTitle>
               <CardDescription className="leading-6">
-                录音仅在浏览器内存中处理，不上传、不持久化；性别和历史分数保存在本机。
+                录音仅在本机处理，不上传；最近 {12} 条录音与报告保存在本机浏览器中，可随时删除。
               </CardDescription>
             </CardHeader>
           </Card>
         </div>
       </main>
+
+      {sessions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><History className="text-primary size-4" />历史录音</CardTitle>
+            <CardDescription>录音与报告保存在本机浏览器中，点击可回看与回放。</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {sessions.map((s) => {
+              const scores = Object.values(s.report.dimensions)
+                .map((d) => d.score)
+                .filter((v) => v >= 0);
+              const mean = scores.length
+                ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+                : null;
+              return (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3"
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    onClick={() => openSession(s)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {new Date(s.createdAt).toLocaleString('zh-CN')}
+                      </span>
+                      <span className="text-muted-foreground mt-0.5 block text-xs tabular-nums">
+                        时长 {s.report.song.duration.toFixed(1)}s · 人声主导{' '}
+                        {Math.round(s.report.song.dominantRatio * 100)}% ·{' '}
+                        {s.report.song.notes.length} 个音符
+                      </span>
+                    </span>
+                    {mean != null && (
+                      <Badge variant="secondary" className="shrink-0 tabular-nums">均分 {mean}</Badge>
+                    )}
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground size-8 shrink-0"
+                    aria-label="删除该录音"
+                    onClick={() => {
+                      if (!window.confirm('确定删除这条本机录音与报告吗？此操作无法撤销。')) return;
+                      void removeSession(s.id);
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              );
+            })}
+            <Button
+              variant="ghost"
+              className="self-start"
+              onClick={() => {
+                if (!window.confirm('确定删除本机保存的全部录音与报告吗？此操作无法撤销。')) return;
+                void clearSessions().then(() => setSessions([]));
+              }}
+            >
+              清空历史录音
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {history.length > 0 && (
         <Card>

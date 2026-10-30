@@ -1,17 +1,19 @@
 // 唱歌录音页：手动开始/停止，支持清唱或 KTV 外放伴奏场景
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Loader2, Mic, Music, Square } from 'lucide-react';
+import { ArrowRight, Loader2, Mic, Music, Pause, Play, RotateCcw, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { releaseMic, monitorLevel, requestMic, rmsToPercent, startRecording, type RecordingHandle } from '@/audio/recorder';
+import { createPcmPlayer, type PcmPlayer } from '@/audio/playback';
 import { useSession } from '@/lib/session-store';
+import type { PcmData } from '@/analysis/types';
 
 const MIN_MS = 8000;
 const MAX_MS = 60_000;
 
-type Phase = 'idle' | 'recording' | 'stopping';
+type Phase = 'idle' | 'recording' | 'stopping' | 'review';
 
 export default function Sing() {
   const navigate = useNavigate();
@@ -25,6 +27,32 @@ export default function Sing() {
   const handleRef = useRef<RecordingHandle | null>(null);
   const cancelledRef = useRef(false);
   const previewStopRef = useRef<(() => void) | null>(null);
+  const [reviewPcm, setReviewPcm] = useState<PcmData | null>(null);
+  const playerRef = useRef<PcmPlayer | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [playPos, setPlayPos] = useState(0);
+
+  // 试听播放进度轮询；播放结束时复位按钮
+  useEffect(() => {
+    if (phase !== 'review') return;
+    const timer = window.setInterval(() => {
+      const player = playerRef.current;
+      if (!player) return;
+      setPlayPos(player.getCurrentTime());
+      if (!player.isPlaying()) setPlaying(false);
+    }, 150);
+    return () => window.clearInterval(timer);
+  }, [phase]);
+
+  // 移动端切后台会冻结 MediaRecorder：录音中页面隐藏时主动停止保存
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden' && phase === 'recording') void stopRecording();
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    return () => document.removeEventListener('visibilitychange', onHidden);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   // 离开页面时释放麦克风和试音监听
   useEffect(() => {
@@ -32,6 +60,8 @@ export default function Sing() {
     return () => {
       cancelledRef.current = true;
       previewStopRef.current?.();
+      playerRef.current?.destroy();
+      playerRef.current = null;
       setStream((s) => {
         if (s) releaseMic(s);
         return null;
@@ -101,18 +131,59 @@ export default function Sing() {
       if (pcm.samples.length / pcm.sampleRate < MIN_MS / 1000) {
         setMicError(`录音时长不足 ${MIN_MS / 1000} 秒`);
         setPhase('idle');
+        if (stream) previewStopRef.current = monitorLevel(stream, setLevel);
         return;
       }
-      setRecording(pcm);
-      navigate('/song-report');
+      // 停止后进入试听确认；释放麦克风，重录时重新申请
+      handleRef.current = null;
+      previewStopRef.current?.();
+      previewStopRef.current = null;
+      if (stream) releaseMic(stream);
+      setStream(null);
+      setLevel(0);
+      setReviewPcm(pcm);
+      setPlayPos(0);
+      setPlaying(false);
+      setPhase('review');
     } catch {
       setMicError('录音失败，请重试');
       setPhase('idle');
-    } finally {
-      setLevel(0);
-      // 回到待录状态后重新开启试音电平（成功时会跳转，由卸载清理）
       if (stream) previewStopRef.current = monitorLevel(stream, setLevel);
     }
+  };
+
+  const togglePreview = () => {
+    if (!reviewPcm) return;
+    const duration = reviewPcm.samples.length / reviewPcm.sampleRate;
+    if (!playerRef.current) playerRef.current = createPcmPlayer(reviewPcm);
+    const player = playerRef.current;
+    if (player.isPlaying()) {
+      player.pause();
+      setPlaying(false);
+    } else {
+      // 已播放到结尾时从头开始
+      if (player.getCurrentTime() >= duration - 0.05) player.play(0, duration);
+      else player.resume();
+      setPlaying(true);
+    }
+  };
+
+  // 重录：销毁试听播放器，回到初始状态重新申请麦克风
+  const rerecord = () => {
+    playerRef.current?.destroy();
+    playerRef.current = null;
+    setReviewPcm(null);
+    setPlayPos(0);
+    setPlaying(false);
+    setPhase('idle');
+  };
+
+  const confirmRecording = () => {
+    if (!reviewPcm) return;
+    playerRef.current?.destroy();
+    playerRef.current = null;
+    setRecording(reviewPcm);
+    navigate('/song-report');
   };
 
   if (micError) {
@@ -132,6 +203,56 @@ export default function Sing() {
               </Button>
               <Link to="/">
                 <Button variant="outline">返回首页</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (phase === 'review' && reviewPcm) {
+    const duration = reviewPcm.samples.length / reviewPcm.sampleRate;
+    return (
+      <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-10">
+        <header>
+          <p className="text-primary text-[10px] font-medium tracking-[0.24em]">REVIEW</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">试听录音</h1>
+          <p className="text-muted-foreground mt-2 text-sm">确认录音可用后生成报告，或重新录制。</p>
+        </header>
+        <Card className="overflow-hidden border-primary/15 py-0 shadow-lg shadow-indigo-950/5">
+          <CardHeader className="bg-gradient-to-br from-slate-950 to-indigo-950 px-6 py-7 text-white">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-white/10 text-violet-300">
+                <Music className="size-5" />
+              </span>
+              录音完成 · {duration.toFixed(1)}s
+            </CardTitle>
+            <CardDescription className="leading-6 text-slate-400">
+              录音仅保存在本机浏览器中，不上传。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5 px-6 pb-7">
+            <div className="flex items-center gap-4">
+              <Button size="icon" className="size-12 shrink-0 rounded-full" onClick={togglePreview} aria-label={playing ? '暂停试听' : '播放试听'}>
+                {playing ? <Pause className="size-5" /> : <Play className="size-5 translate-x-0.5" />}
+              </Button>
+              <div className="flex flex-1 flex-col gap-1">
+                <Progress value={(playPos / duration) * 100} />
+                <p className="text-muted-foreground text-xs tabular-nums">
+                  {playPos.toFixed(1)}s / {duration.toFixed(1)}s
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="lg" className="h-12 px-6" onClick={confirmRecording}>
+                生成报告<ArrowRight className="size-4" />
+              </Button>
+              <Button size="lg" variant="outline" className="h-12 px-6" onClick={rerecord}>
+                <RotateCcw className="size-4" />重录
+              </Button>
+              <Link to="/">
+                <Button size="lg" variant="ghost" className="h-12">放弃</Button>
               </Link>
             </div>
           </CardContent>
@@ -234,7 +355,7 @@ export default function Sing() {
             {phase === 'recording' && (
               <Button variant="destructive" onClick={() => void stopRecording()} disabled={elapsed < MIN_MS}>
                 <Square className="size-4" />
-                停止并分析{elapsed < MIN_MS ? `（至少 ${MIN_MS / 1000}s）` : ''}
+                停止{elapsed < MIN_MS ? `（至少 ${MIN_MS / 1000}s）` : ''}
               </Button>
             )}
             {phase === 'stopping' && (

@@ -73,6 +73,15 @@ export interface VibratoInfo {
   extent: number;
 }
 
+/** 连续音高轨迹点（人声主导帧），用于绘制 f0 曲线 */
+export interface PitchPoint {
+  t: number;
+  /** 基频 Hz */
+  f0: number;
+  /** 相对最近半音的偏差（音分） */
+  cents: number;
+}
+
 export interface SongResult {
   duration: number;
   voicedRatio: number;
@@ -84,6 +93,8 @@ export interface SongResult {
   meanRms: number;
   envelope: { times: number[]; rms: number[] };
   notes: NoteSegment[];
+  /** 连续音高轨迹（抽稀到约 1000 点） */
+  pitchTrack: PitchPoint[];
   vibrato: VibratoInfo;
   /** 平均音高绝对偏差（音分，含整体起音偏移） */
   pitchAccuracy: number;
@@ -572,6 +583,17 @@ export function analyzeSong(pcm: PcmData): SongResult {
 
   const env = rmsEnvelope(samples, rate, 1024, 512);
 
+  // 连续音高轨迹：仅人声主导帧，抽稀到约 1000 点控制传输与绘制开销
+  const voicedStat = statFrames.filter((f) => f.f0 != null);
+  const trackStride = Math.max(1, Math.floor(voicedStat.length / 1000));
+  const pitchTrack: PitchPoint[] = [];
+  for (let i = 0; i < voicedStat.length; i += trackStride) {
+    const f = voicedStat[i];
+    const f0 = f.f0 as number;
+    const midiFloat = 69 + 12 * Math.log2(f0 / 440);
+    pitchTrack.push({ t: f.time, f0, cents: (midiFloat - Math.round(midiFloat)) * 100 });
+  }
+
   return {
     duration,
     voicedRatio,
@@ -582,6 +604,7 @@ export function analyzeSong(pcm: PcmData): SongResult {
     meanRms: frameRms.length > 0 ? frameRms.reduce((a, b) => a + b, 0) / frameRms.length : 0,
     envelope: { times: env.times, rms: env.rms },
     notes,
+    pitchTrack,
     vibrato: { rate: median(vibRates), extent: median(vibExtents) },
     pitchAccuracy,
     pitchOffset,

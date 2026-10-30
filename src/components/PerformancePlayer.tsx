@@ -185,6 +185,7 @@ export function PerformancePlayer({ pcm, song }: PerformancePlayerProps) {
           <div className="overflow-x-auto rounded-2xl border bg-white/70 p-3">
             <NoteChart
               notes={song.notes}
+              pitchTrack={song.pitchTrack}
               duration={song.duration}
               currentTime={currentTime}
               activeIndex={activeNoteIndex}

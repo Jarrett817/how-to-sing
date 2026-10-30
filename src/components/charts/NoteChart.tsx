@@ -1,9 +1,11 @@
-// 音符钢琴卷帘图：x=时间，y=音高（半音），颜色=音准偏差；支持点击音符回放
+// 音高图：连续 f0 曲线（颜色=音分偏差）+ 音符块背景；支持点击音符回放
 import { useEffect, useMemo, useRef } from 'react';
-import { midiToName, type NoteSegment } from '@/analysis/song';
+import { midiToName, type NoteSegment, type PitchPoint } from '@/analysis/song';
 
 interface NoteChartProps {
   notes: NoteSegment[];
+  /** 连续音高轨迹；缺省时只画音符块 */
+  pitchTrack?: PitchPoint[];
   width?: number;
   height?: number;
   /** 传入后音符可点击（用于回放对应片段） */
@@ -16,16 +18,22 @@ interface NoteChartProps {
   duration?: number;
 }
 
-/** |centsDev| → 颜色：≤15 准，≤35 略偏，>35 明显偏 */
-function noteColor(centsDev: number): string {
-  const a = Math.abs(centsDev);
+/** |cents| → 颜色：≤15 准，≤35 略偏，>35 明显偏 */
+function centsColor(cents: number): string {
+  const a = Math.abs(cents);
   if (a <= 15) return '#22c55e';
   if (a <= 35) return '#eab308';
   return '#ef4444';
 }
 
+/** f0 Hz → MIDI 浮点（含小数音分） */
+function f0ToMidi(f0: number): number {
+  return 69 + 12 * Math.log2(f0 / 440);
+}
+
 export function NoteChart({
   notes,
+  pitchTrack,
   width = 640,
   height = 180,
   onNoteClick,
@@ -37,16 +45,18 @@ export function NoteChart({
 
   // 布局几何同时用于绘制与点击命中，避免两处各算一遍不一致
   const geom = useMemo(() => {
-    if (notes.length === 0) return null;
+    const trackMidis = (pitchTrack ?? []).map((p) => f0ToMidi(p.f0));
+    const noteMidis = notes.map((n) => n.midi);
+    const allMidis = [...trackMidis, ...noteMidis];
+    if (allMidis.length === 0) return null;
     const padL = 36;
     const padR = 8;
     const padT = 8;
     const padB = 18;
     const plotW = width - padL - padR;
     const plotH = height - padT - padB;
-    const midis = notes.map((n) => n.midi);
-    const minMidi = Math.min(...midis) - 1;
-    const maxMidi = Math.max(...midis) + 1;
+    const minMidi = Math.floor(Math.min(...allMidis)) - 1;
+    const maxMidi = Math.ceil(Math.max(...allMidis)) + 1;
     const maxT = Math.max(duration ?? 0, ...notes.map((n) => n.endSec), 0.001);
     return {
       padL,
@@ -60,7 +70,7 @@ export function NoteChart({
       xOf: (t: number) => padL + (t / maxT) * plotW,
       rowH: plotH / (maxMidi - minMidi + 1),
     };
-  }, [notes, width, height, duration]);
+  }, [notes, pitchTrack, width, height, duration]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -95,12 +105,13 @@ export function NoteChart({
       }
     }
 
-    // 音符块（正在回放的描边高亮）
+    // 音符块作为切分参照（有 f0 曲线时弱化透明度）
+    const blockAlpha = pitchTrack && pitchTrack.length > 0 ? 0.28 : 0.85;
     notes.forEach((n, i) => {
       const x = xOf(n.startSec);
       const w = Math.max(2, xOf(n.endSec) - x - 1);
-      ctx.fillStyle = noteColor(n.centsDev);
-      ctx.globalAlpha = i === activeIndex ? 1 : 0.85;
+      ctx.fillStyle = centsColor(n.centsDev);
+      ctx.globalAlpha = i === activeIndex ? 0.9 : blockAlpha;
       ctx.beginPath();
       ctx.roundRect(x, yOf(n.midi) - rowH / 2 + 1, w, rowH - 2, 2);
       ctx.fill();
@@ -111,6 +122,33 @@ export function NoteChart({
       }
       ctx.globalAlpha = 1;
     });
+
+    // 连续 f0 曲线：相邻点间隔超过 60ms 视为中断，分段绘制
+    if (pitchTrack && pitchTrack.length > 0) {
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      let segStart = 0;
+      const drawSeg = (from: number, to: number) => {
+        if (to <= from) return;
+        for (let i = from; i < to; i++) {
+          const p0 = pitchTrack[i];
+          const p1 = pitchTrack[i + 1];
+          ctx.strokeStyle = centsColor(p1.cents);
+          ctx.beginPath();
+          ctx.moveTo(xOf(p0.t), yOf(f0ToMidi(p0.f0)));
+          ctx.lineTo(xOf(p1.t), yOf(f0ToMidi(p1.f0)));
+          ctx.stroke();
+        }
+      };
+      for (let i = 1; i < pitchTrack.length; i++) {
+        if (pitchTrack[i].t - pitchTrack[i - 1].t > 0.06) {
+          drawSeg(segStart, i);
+          segStart = i;
+        }
+      }
+      drawSeg(segStart, pitchTrack.length - 1);
+    }
 
     // 播放头与音频时间同步，位置超出最后一个音符时也继续走到录音末尾
     if (currentTime != null && currentTime >= 0 && currentTime <= maxT) {
@@ -134,7 +172,7 @@ export function NoteChart({
     for (let t = 0; t <= maxT; t += 5) {
       ctx.fillText(`${t}s`, xOf(t), padT + plotH + 4);
     }
-  }, [notes, geom, activeIndex, currentTime, width, height]);
+  }, [notes, pitchTrack, geom, activeIndex, currentTime, width, height]);
 
   if (!geom) return null;
 

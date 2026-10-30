@@ -1,4 +1,4 @@
-// 当前唱歌录音只保存在内存中，刷新后即消失
+// 当前录音在内存中保存；历史录音与报告由 IndexedDB 持久化（见 storage.ts）
 import {
   createContext,
   useCallback,
@@ -8,19 +8,43 @@ import {
   type ReactNode,
 } from 'react';
 import type { AnalysisReport, Gender, PcmData } from '@/analysis/types';
+import type { SongReport } from '@/analysis/song';
+
+export interface ActiveSession {
+  pcm: PcmData;
+  /** 已持久化会话的报告（历史回看时免重新分析）；新录音为空 */
+  report?: SongReport;
+  /** 已持久化会话 id，用于报告生成后更新而非新增 */
+  storedId?: string;
+}
 
 interface SessionState {
   recording: PcmData | null;
+  storedReport: SongReport | null;
+  storedId?: string;
   setRecording: (pcm: PcmData) => void;
+  loadSession: (session: ActiveSession) => void;
   reset: () => void;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [recording, setRecording] = useState<PcmData | null>(null);
-  const reset = useCallback(() => setRecording(null), []);
-  const value = useMemo(() => ({ recording, setRecording, reset }), [recording, reset]);
+  const [session, setSession] = useState<ActiveSession | null>(null);
+  const setRecording = useCallback((pcm: PcmData) => setSession({ pcm }), []);
+  const loadSession = useCallback((active: ActiveSession) => setSession(active), []);
+  const reset = useCallback(() => setSession(null), []);
+  const value = useMemo(
+    () => ({
+      recording: session?.pcm ?? null,
+      storedReport: session?.report ?? null,
+      storedId: session?.storedId,
+      setRecording,
+      loadSession,
+      reset,
+    }),
+    [session, setRecording, loadSession, reset],
+  );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

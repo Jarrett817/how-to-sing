@@ -6,10 +6,12 @@ import {
   ANALYSIS_RATE,
   analyzeSong,
   analyzeSongReport,
+  detectVibrato,
   harmonicSalience,
   segmentNotes,
+  splitPhrases,
 } from '../song';
-import { trackPitch } from '../pitch';
+import { trackPitch, type PitchFrame } from '../pitch';
 import { classifyVoiceRange } from '../voice-range';
 
 const RATE = ANALYSIS_RATE;
@@ -217,5 +219,138 @@ describe('classifyVoiceRange 音区与声部参考', () => {
     expect(result?.genderText).toBe('女声参考');
     expect(result?.typeText).toContain('不足以判断声部');
     expect(result?.reliable).toBe(false);
+  });
+});
+
+describe('segmentNotes 纯函数边界', () => {
+  const fps = RATE / 512;
+  const mk = (f0: number | null, i: number): PitchFrame => ({
+    time: i / fps,
+    f0,
+    clarity: 1,
+  });
+
+  it('短于 0.12s 或不足 4 帧的同半音段被丢弃', () => {
+    const frames: PitchFrame[] = [];
+    // 3 帧 A3（短）→ 静默 → 8 帧 A3（长）
+    for (let i = 0; i < 3; i++) frames.push(mk(220, i));
+    for (let i = 3; i < 8; i++) frames.push(mk(null, i));
+    for (let i = 8; i < 16; i++) frames.push(mk(220, i));
+    const notes = segmentNotes(frames);
+    expect(notes.length).toBe(1);
+    expect(notes[0].midi).toBe(57);
+    expect(notes[0].startSec).toBeCloseTo(8 / fps, 3);
+  });
+
+  it('相邻半音量化合并、音符名正确', () => {
+    const frames: PitchFrame[] = [];
+    // 6 帧精确 A3 + 6 帧 A3 +30 音分（仍量化为 57）
+    for (let i = 0; i < 6; i++) frames.push(mk(220, i));
+    const sharp = 220 * 2 ** (30 / 1200);
+    for (let i = 6; i < 12; i++) frames.push(mk(sharp, i));
+    const notes = segmentNotes(frames);
+    expect(notes.length).toBe(1);
+    expect(notes[0].name).toBe('A3');
+    expect(notes[0].centsDev).toBeGreaterThan(10);
+    expect(notes[0].centsDev).toBeLessThan(25);
+  });
+
+  it('全无声帧返回空', () => {
+    const frames = Array.from({ length: 20 }, (_, i) => mk(null, i));
+    expect(segmentNotes(frames)).toEqual([]);
+  });
+});
+
+describe('detectVibrato 纯函数', () => {
+  const fps = RATE / 512; // ≈43.07
+  const mkFrames = (freqAt: (t: number) => number, dur: number): PitchFrame[] => {
+    const n = Math.floor(dur * fps);
+    return Array.from({ length: n }, (_, i) => ({
+      time: i / fps,
+      f0: freqAt(i / fps),
+      clarity: 1,
+    }));
+  };
+
+  it('6Hz / ±50 音分正弦调制：速率检出且幅度量级正确', () => {
+    const frames = mkFrames(
+      (t) => 220 * 2 ** ((50 * Math.sin(2 * Math.PI * 6 * t)) / 1200),
+      1.2,
+    );
+    const v = detectVibrato(frames, fps);
+    expect(Number.isFinite(v.rate)).toBe(true);
+    expect(v.rate).toBeGreaterThan(5);
+    expect(v.rate).toBeLessThan(7);
+    // extent 为峰峰值估计 ≈ 2√2·std，±50 正弦 → std≈35.4 → ≈100
+    expect(v.extent).toBeGreaterThan(70);
+    expect(v.extent).toBeLessThan(130);
+  });
+
+  it('恒定基频返回 NaN', () => {
+    const v = detectVibrato(mkFrames(() => 220, 1.2), fps);
+    expect(Number.isFinite(v.rate)).toBe(false);
+    expect(Number.isFinite(v.extent)).toBe(false);
+  });
+
+  it('帧数不足 0.5s 返回 NaN', () => {
+    const v = detectVibrato(mkFrames(() => 220, 0.3), fps);
+    expect(Number.isFinite(v.rate)).toBe(false);
+  });
+});
+
+describe('splitPhrases 纯函数', () => {
+  const hopSec = 512 / RATE;
+
+  it('两段发声夹 0.6s 间隙：切分为 2 个乐句', () => {
+    const fps = 1 / hopSec;
+    const n = Math.ceil(3.0 * fps);
+    const rms: number[] = [];
+    const voiced: boolean[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / fps;
+      const inGap = t >= 1.0 && t < 1.6;
+      rms.push(inGap ? 0 : 0.2);
+      voiced.push(!inGap);
+    }
+    const phrases = splitPhrases(rms, voiced, hopSec);
+    expect(phrases.length).toBe(2);
+    expect(phrases[0].startSec).toBeCloseTo(0, 2);
+    expect(phrases[1].endSec).toBeGreaterThan(2.7);
+  });
+
+  it('0.2s 换气间隙（≤ 0.3s）不切分乐句', () => {
+    const fps = 1 / hopSec;
+    const n = Math.ceil(2.4 * fps);
+    const rms: number[] = [];
+    const voiced: boolean[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / fps;
+      const inGap = t >= 1.0 && t < 1.2;
+      rms.push(inGap ? 0 : 0.2);
+      voiced.push(!inGap);
+    }
+    expect(splitPhrases(rms, voiced, hopSec).length).toBe(1);
+  });
+
+  it('恒定响度乐句 CV 接近 0；无发声帧返回空', () => {
+    const fps = 1 / hopSec;
+    const n = Math.ceil(2 * fps);
+    const rms = new Array(n).fill(0.2);
+    const voiced = new Array(n).fill(true);
+    const phrases = splitPhrases(rms, voiced, hopSec);
+    expect(phrases.length).toBe(1);
+    expect(phrases[0].cv).toBeLessThan(5);
+    expect(splitPhrases(new Array(n).fill(0), new Array(n).fill(false), hopSec)).toEqual([]);
+  });
+});
+
+describe('analyzeSong 空输入保护', () => {
+  it('纯静音：不产出音符/乐句，指标为 NaN 或 0，不抛异常', () => {
+    const result = analyzeSong({ samples: new Float32Array(RATE * 2), sampleRate: RATE });
+    expect(result.notes.length).toBe(0);
+    expect(result.phrases.length).toBe(0);
+    expect(result.voicedRatio).toBe(0);
+    expect(Number.isFinite(result.pitchAccuracy)).toBe(false);
+    expect(Number.isFinite(result.medianF0)).toBe(false);
   });
 });
